@@ -1,38 +1,68 @@
 import geopandas as gpd
 
-# YOLLARI KENDİNE GÖRE GÜNCELLE
-TURKEY_PATH = "regions87.geojson"              # Türkiye’nin 87 bölgeli dosyası
-IST_PATH    = "istanbul_regions_3geo.json"     # İlçe bazlı dissolve ettiğimiz İstanbul 3 bölge dosyası
-OUT_PATH    = "regions87_istanbul_fixed.geojson"
+# --- PATH AYARLARI ---
+TURKEY_PATH = "assets/maps/regions87.geojson"               # Türkiye 87 bölgeli ana dosya
+IST_PATH    = "assets/maps/istanbul_regions_3geo.json"      # İstanbul dissolve sonucu 3 bölge
+ANK_PATH    = "assets/maps/ankara_regions_3geo.json"        # Ankara dissolve sonucu 3 bölge
 
-print("Dosyalar yükleniyor...")
+OUT_PATH    = "assets/maps/regions87_istanbul_ankara_fixed.geojson"
+
+
+print("\n📌 Dosyalar yükleniyor...")
 turkey = gpd.read_file(TURKEY_PATH)
 ist = gpd.read_file(IST_PATH)
+ank = gpd.read_file(ANK_PATH)
 
-print("Önceki kolonlar (turkey):", turkey.columns)
-print("Önceki kolonlar (ist):", ist.columns)
+print("→ Türkiye kolonları:", list(turkey.columns))
+print("→ İstanbul kolonları:", list(ist.columns))
+print("→ Ankara kolonları:", list(ank.columns))
 
-# ist dosyasında: region_id, city, seats, geometry var
-# turkey dosyasında: id, name, city, seats, geometry var (id -> ISTANBUL-1/2/3)
-# region_id ile id’yi eşleştiriyoruz
+
+# ------------------------------
+# 1) İSTANBUL 3 BÖLGE ENTEGRASYONU
+# ------------------------------
+print("\n🔵 İstanbul bölgeleri işleniyor...")
+
 merged = turkey.merge(
     ist[["region_id", "geometry"]],
     left_on="id",
     right_on="region_id",
     how="left",
-    suffixes=("", "_new"),
+    suffixes=("", "_ist"),
 )
 
-# region_id dolu olan satırlar İstanbul-1/2/3
-mask = merged["region_id"].notna()
-print("Güncellenecek satır sayısı (İstanbul bölgeleri):", mask.sum())
+ist_mask = merged["region_id"].notna()
+print("→ Güncellenecek İstanbul bölgesi sayısı:", ist_mask.sum())
 
-# İstanbul-1/2/3’ün geometrisini yeniyle değiştir
-merged.loc[mask, "geometry"] = merged.loc[mask, "geometry_new"]
+merged.loc[ist_mask, "geometry"] = merged.loc[ist_mask, "geometry_ist"]
+merged = merged.drop(columns=["region_id", "geometry_ist"])
 
-# Temizlik
-merged = merged.drop(columns=["region_id", "geometry_new"])
 
-print("Kaydediliyor:", OUT_PATH)
+# ------------------------------
+# 2) ANKARA 3 BÖLGE ENTEGRASYONU
+# ------------------------------
+print("\n🟣 Ankara bölgeleri işleniyor...")
+
+merged = merged.merge(
+    ank[["region_id", "geometry"]],
+    left_on="id",
+    right_on="region_id",
+    how="left",
+    suffixes=("", "_ank"),
+)
+
+ank_mask = merged["region_id"].notna()
+print("→ Güncellenecek Ankara bölgesi sayısı:", ank_mask.sum())
+
+merged.loc[ank_mask, "geometry"] = merged.loc[ank_mask, "geometry_ank"]
+merged = merged.drop(columns=["region_id", "geometry_ank"])
+
+
+# ------------------------------
+# 3) KAYDET
+# ------------------------------
+print("\n💾 Kaydediliyor:", OUT_PATH)
 merged.to_file(OUT_PATH, driver="GeoJSON")
-print("Bitti. Yeni dosya:", OUT_PATH)
+
+print("\n🎉 BİTTİ!")
+print("✔ Yeni GeoJSON hazır:", OUT_PATH)

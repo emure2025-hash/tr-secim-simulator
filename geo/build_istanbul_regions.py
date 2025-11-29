@@ -1,5 +1,9 @@
 import geopandas as gpd
 import unicodedata
+from pathlib import Path
+
+# Bu dosyanın bulunduğu klasör (geo/)
+BASE_DIR = Path(__file__).parent
 
 def normalize_turkish(s):
     """Türkçe karakterleri normalize et ve karşılaştırmaya hazırla"""
@@ -23,8 +27,11 @@ def normalize_turkish(s):
     
     return s
 
-# 1) İstanbul ilçe GeoJSON'unu oku
-gdf = gpd.read_file("istanbul_districts.geojson")
+# 1) İstanbul ilçe GeoJSON'unu oku (geo klasörü içinden)
+SRC = BASE_DIR / "istanbul_districts.geojson"
+print("Kaynak dosya:", SRC)
+
+gdf = gpd.read_file(SRC)
 
 print("Kolonlar:", gdf.columns.tolist())
 print("\nİlk ilçeler:")
@@ -100,7 +107,7 @@ else:
 gdf_valid = gdf.dropna(subset=["region_id"])
 if gdf_valid.empty:
     print("HATA: Hiçbir ilçe eşleşmedi. Mapping'i kontrol edin.")
-    exit(1)
+    raise SystemExit(1)
 
 regions = gdf_valid.dissolve(by="region_id", as_index=False)
 
@@ -116,7 +123,9 @@ regions["seats"] = regions["region_id"].map({
 cols_to_keep = ["region_id", "city", "seats", "geometry"]
 regions = regions[[c for c in cols_to_keep if c in regions.columns]]
 
-# GeoJSON olarak kaydet
-regions.to_file("istanbul_regions_3geo.json", driver="GeoJSON")
+# Çıktı dosyası (geo klasörüne)
+OUT = BASE_DIR / "istanbul_regions_3geo.json"
+regions.to_file(OUT, driver="GeoJSON")
 print("\n✓ istanbul_regions_3geo.json oluşturuldu.")
+print(f"Konum: {OUT}")
 print(f"Toplam bölge: {len(regions)}")

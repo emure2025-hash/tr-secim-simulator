@@ -69,59 +69,32 @@ class _MapPageState extends State<MapPage> {
     return Rect.fromLTRB(minX!, minY!, maxX!, maxY!);
   }
 
-  // GeoJSON loader (rootBundle + birden fazla aday path destekli)
+  // GeoJSON loader (sadece regions87.geojson'u yükle)
   Future<void> _loadMap() async {
-    final candidates = <String>[
-      'assets/maps/regions87.geojson',
-      'assets/maps/turkey_regions.geojson',
-      'assets/maps/regions.geojson',
-    ];
+    const path = 'assets/maps/regions87_all.geojson';
 
-    String? loadedPath;
-    for (final path in candidates) {
-      try {
-        final data = await rootBundle.loadString(path);
-        if (data.trim().isEmpty) {
-          // ignore: avoid_print
-          print('Asset $path empty, trying next.');
-          continue;
-        }
-        final decoded = json.decode(data);
-        if (decoded is Map<String, dynamic>) {
-          final bounds = computeGeoBounds(decoded);
-          setState(() {
-            geoJson = decoded;
-            geoBounds = bounds;
-          });
-          loadedPath = path;
-          break;
-        } else {
-          // ignore: avoid_print
-          print('Asset $path decoded but not a FeatureCollection Map.');
-        }
-      } catch (e) {
+    try {
+      final data = await rootBundle.loadString(path);
+
+      final decoded = json.decode(data);
+      if (decoded is Map<String, dynamic>) {
+        setState(() {
+          geoJson = decoded;
+          geoBounds = computeGeoBounds(decoded);
+        });
+
         // ignore: avoid_print
-        print('Failed to load asset $path: $e');
+        print('Loaded geojson from $path');
+      } else {
+        // ignore: avoid_print
+        print('ERROR: GeoJSON formatı FeatureCollection değil.');
       }
-    }
-
-    if (loadedPath == null) {
-      // Daha açıklayıcı log ve boş fallback
+    } catch (e) {
       // ignore: avoid_print
-      print(
-          "ERROR: Harita asset'i bulunamadı veya boş. assets/maps içeriğini ve pubspec.yaml'i kontrol edin.");
+      print('ERROR: $path yüklenemedi: $e');
       setState(() {
-        geoJson = {
-          'type': 'FeatureCollection',
-          'features': [],
-        };
-        geoBounds = const Rect.fromLTRB(0, 0, 1, 1);
+        geoJson = {'type': 'FeatureCollection', 'features': []};
       });
-    } else {
-      // ignore: avoid_print
-      print('Loaded geojson from $loadedPath');
-      // ignore: avoid_print
-      print('Geo bounds: $geoBounds');
     }
   }
 
