@@ -23,6 +23,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/maps/regions87_all.geojson
-    - assets/maps/izmir_regions_final.geojson
+    - assets/maps/turkiye_87_secim_bolgesi.geojson
+
   
