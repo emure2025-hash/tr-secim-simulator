@@ -16,6 +16,7 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   bool showInput = true;
   Map<String, int>? result;
+  Map<String, double> lastVotes = {}; // Son oy oranlarını sakla
   List<dynamic> features = [];
   double mapScale = 1.0;
   Offset mapOffset = Offset.zero;
@@ -36,8 +37,10 @@ class _MainPageState extends State<MainPage> {
       setState(() {
         features = decoded["features"] as List<dynamic>;
       });
+      
+      debugPrint("✅ GeoJSON yüklendi: ${features.length} bölge");
     } catch (e) {
-      debugPrint("GeoJSON yüklenemedi: $e");
+      debugPrint("❌ GeoJSON yüklenemedi: $e");
     }
   }
 
@@ -117,14 +120,19 @@ class _MainPageState extends State<MainPage> {
                 onSimulate: (votes, threshold) {
                   final r = _calculateParliament(votes, threshold);
                   setState(() {
+                    lastVotes = Map<String, double>.from(votes);
                     result = r;
                     showInput = false;
                   });
                 },
               )
-            : ResultPanel(
+            : ResultScreen(
                 key: const ValueKey("result"),
                 result: result ?? {},
+                features: features,
+                mapScale: mapScale,
+                mapOffset: mapOffset,
+                votes: lastVotes, // Son oy oranlarını da geçirebilirsiniz
                 onBack: () {
                   setState(() {
                     showInput = true;
@@ -230,6 +238,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                     scale: widget.mapScale,
                     offset: widget.mapOffset,
                     result: null,
+                    votes: null, // OY ORANLARINI HARITAYA GÖNDER
                     onScaleUpdate: (details) {
                       widget.onMapUpdate(
                         (widget.mapScale * details.scale).clamp(0.5, 3.0),
@@ -294,8 +303,8 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                         Slider(
                           value: threshold,
                           min: 0,
-                          max: 15,
-                          divisions: 150,
+                          max: 10,
+                          divisions: 20, // 0.5'lik hassasiyet
                           label: "%${threshold.toStringAsFixed(1)}",
                           activeColor: Colors.amber.shade700,
                           onChanged: (v) => setState(() => threshold = v),
@@ -455,14 +464,22 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
 }
 
 // -------------------------------------------------------------
-// SONUÇ PANELİ
+// SONUÇ EKRANI (HARİTA + SONUÇLAR)
 // -------------------------------------------------------------
-class ResultPanel extends StatelessWidget {
+class ResultScreen extends StatelessWidget {
   final Map<String, int> result;
+  final List<dynamic> features;
+  final double mapScale;
+  final Offset mapOffset;
+  final Map<String, double> votes;
   final VoidCallback onBack;
 
-  const ResultPanel({
+  const ResultScreen({
     required this.result,
+    required this.features,
+    required this.mapScale,
+    required this.mapOffset,
+    required this.votes,
     required this.onBack,
     super.key,
   });
@@ -474,29 +491,45 @@ class ResultPanel extends StatelessWidget {
     final sorted = result.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    return Container(
-      color: Colors.grey.shade100,
-      child: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-            const Text(
-              "Milletvekili Dağılımı",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Toplam: $totalSeats MV",
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-            const SizedBox(height: 16),
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          // --------------------- HARİTA BÖLÜMÜ ---------------------
+          SizedBox(
+            height: 350,
+            child: features.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : MapWidget(
+                    features: features,
+                    scale: mapScale,
+                    offset: mapOffset,
+                    result: result,
+                    votes: null,
+                    onScaleUpdate: (details) {
+                      // Sonuç ekranında harita sabit
+                    },
+                  ),
+          ),
 
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: sorted.length,
-                itemBuilder: (context, index) {
-                  final entry = sorted[index];
+          // --------------------- SONUÇ PANELI ---------------------
+          Container(
+            color: Colors.grey.shade100,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                const Text(
+                  "Milletvekili Dağılımı",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "Toplam: $totalSeats MV",
+                  style: const TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+
+                // Sonuç listesi
+                ...sorted.map((entry) {
                   final percentage =
                       totalSeats > 0 ? (entry.value / totalSeats * 100) : 0.0;
 
@@ -542,32 +575,33 @@ class ResultPanel extends StatelessWidget {
                       ),
                     ),
                   );
-                },
-              ),
-            ),
+                }).toList(),
 
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: ElevatedButton(
-                onPressed: onBack,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueGrey.shade700,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: onBack,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueGrey.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    minimumSize: const Size(double.infinity, 50),
                   ),
-                  minimumSize: const Size(double.infinity, 50),
+                  child: const Text(
+                    "Geri Dön ve Oyları Değiştir",
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
                 ),
-                child: const Text(
-                  "Geri Dön ve Oyları Değiştir",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
+
+// ESKİ ResultPanel silindi, artık ResultScreen kullanılıyor
+
