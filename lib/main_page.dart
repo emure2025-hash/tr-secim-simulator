@@ -173,9 +173,9 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
     "CHP": 0.0,
     "AKP": 0.0,
     "MHP": 0.0,
-    "İYİ Parti": 0.0,
+    "IYI Parti": 0.0,
     "DEM": 0.0,
-    "Diğer": 0.0,
+    "DIGER": 0.0,
   };
 
   double threshold = 0.0; // Seçim barajı başlangıç değeri %0
@@ -237,8 +237,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                     features: widget.features,
                     scale: widget.mapScale,
                     offset: widget.mapOffset,
-                    result: null,
-                    votes: null, // OY ORANLARINI HARITAYA GÖNDER
+                    nationalVotes: const {}, // OY ORANLARINI HARITAYA GÖNDER
                     onScaleUpdate: (details) {
                       widget.onMapUpdate(
                         (widget.mapScale * details.scale).clamp(0.5, 3.0),
@@ -503,8 +502,7 @@ class ResultScreen extends StatelessWidget {
                     features: features,
                     scale: mapScale,
                     offset: mapOffset,
-                    result: result,
-                    votes: null,
+                    nationalVotes: votes,
                     onScaleUpdate: (details) {
                       // Sonuç ekranında harita sabit
                     },

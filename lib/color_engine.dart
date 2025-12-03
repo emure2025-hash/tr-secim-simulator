@@ -1,53 +1,75 @@
 import 'package:flutter/material.dart';
 import 'strengths.dart';
 
-/// Partilerin renkleri
+/// Partilerin renkleri (temiz isimlerle)
 final Map<String, Color> partyColors = {
-  "CHP": const Color(0xFFC00000),       // koyu k��rm��z��
-  "AKP": const Color(0xFFFF7A00),       // koyu turuncu
-  "MHP": const Color(0xFF8B4513),       // kahverengi
-  "��Y�� Parti": const Color(0xFF00C8C8), // turkuaz
-  "IYI": const Color(0xFF00C8C8),       // turkuaz - fallback
-  "IYI Parti": const Color(0xFF00C8C8), // turkuaz - fallback
-  "DEM": const Color(0xFF6A0DAD),       // mor
-  "HDP/DEM": const Color(0xFF6A0DAD),   // mor
-  "Di�Yer": Colors.grey,
+  "CHP": const Color(0xFFC00000),
+  "AKP": const Color(0xFFFF7A00),
+  "MHP": const Color(0xFF8B4513),
+  "İYİ Parti": const Color(0xFF00C8C8),
+  "IYI Parti": const Color(0xFF00C8C8),
+  "IYI": const Color(0xFF00C8C8),
+  "DEM": const Color(0xFF6A0DAD),
+  "HDP/DEM": const Color(0xFF6A0DAD),
+  "Diğer": Colors.grey,
+  "DIGER": Colors.grey,
 };
 
 Color colorForParty(String party) {
   final known = partyColors[party];
   if (known != null) return known;
-  // Deterministic renk: parti ad��ndan h�� hesaplay��p renge ��evir
   final hash = party.hashCode & 0xFFFFFF;
   final hue = (hash % 360).toDouble();
   return HSLColor.fromAHSL(1, hue, 0.55, 0.55).toColor();
 }
 
-/// strengths.dart yap��s��na birebir uyan basit kazanan hesab��
+/// Şehir bazlı renklendirme (strengths.dart haritaları kullanılır)
 Color computeRegionColor({
   required String city,
-  required Map<String, double> nationalVotes, // kullan��lm��yor ama parametre dursun
+  required Map<String, double> nationalVotes,
 }) {
-  // �?ehir ad��n�� normalize et
-  // ignore: unused_local_variable
-  final c = city.toLowerCase();
+  if (nationalVotes.isEmpty) return Colors.grey.shade300;
 
-  // �?ehir i��in tǬm parti strengthlerini oku
-  final strengths = {
-    "CHP": PartyStrengths.chp[city] ?? 0,
-    "AKP": PartyStrengths.akp[city] ?? 0,
-    "MHP": PartyStrengths.mhp[city] ?? 0,
-    "IYI": PartyStrengths.iyi[city] ?? 0,
-    "DEM": PartyStrengths.dem[city] ?? 0,
-    "DIGER": PartyStrengths.diger[city] ?? 0,
-  };
+  final Map<String, double> weighted = {};
 
-  // En gǬ��l�� partiyi bul
-  final winnerEntry =
-      strengths.entries.reduce((a, b) => a.value > b.value ? a : b);
+  nationalVotes.forEach((party, nationalVote) {
+    double strength = 1.0;
+    switch (party) {
+      case 'CHP':
+        strength = strengthFromMap(chpStrength, city);
+        break;
+      case 'AKP':
+        strength = strengthFromMap(akpStrength, city);
+        break;
+      case 'MHP':
+        strength = strengthFromMap(mhpStrength, city);
+        break;
+      case 'İYİ Parti':
+      case 'IYI Parti':
+      case 'IYI':
+        strength = strengthFromMap(iyiStrength, city);
+        break;
+      case 'HDP/DEM':
+      case 'DEM':
+      case 'HDP':
+        strength = strengthFromMap(demStrength, city);
+        break;
+      case 'Diğer':
+      case 'DIGER':
+        strength = strengthFromMap(otherStrength, city);
+        break;
+      default:
+        strength = strengthFromMap(otherStrength, city);
+    }
 
-  final winner = winnerEntry.key;
+    final value = (nationalVote.isFinite ? nationalVote : 0.0) *
+        (strength.isFinite ? strength : 1.0);
+    weighted[party] = value;
+  });
 
-  // Rengi d��nd��r
+  if (weighted.isEmpty) return Colors.grey.shade300;
+
+  final winner = weighted.entries.reduce((a, b) => a.value > b.value ? a : b).key;
   return colorForParty(winner);
 }
+
