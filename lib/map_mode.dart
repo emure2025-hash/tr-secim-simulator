@@ -1,0 +1,1 @@
+enum MapMode { party, alliance }

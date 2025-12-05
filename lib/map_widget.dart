@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'color_engine.dart';
 import 'region_calculator.dart';
+import 'alliance_calculator.dart';
 
 // -------------------------------------------------------------
 // TÜRKİYE HARİTASI WIDGET'I
@@ -11,6 +12,8 @@ class MapWidget extends StatelessWidget {
   final double scale;
   final Offset offset;
   final Map<String, RegionResult>? regionResults; // Bölge sonuçları
+  final Map<String, RegionAllianceResult>? regionAllianceResults; // İttifak sonuçları
+  final bool useAllianceColors;
   final Function(String regionId)? onRegionTap; // Tıklama callback'i
   final ValueChanged<ScaleUpdateDetails> onScaleUpdate;
 
@@ -19,6 +22,8 @@ class MapWidget extends StatelessWidget {
     required this.scale,
     required this.offset,
     this.regionResults,
+    this.regionAllianceResults,
+    this.useAllianceColors = false,
     this.onRegionTap,
     required this.onScaleUpdate,
     super.key,
@@ -35,6 +40,8 @@ class MapWidget extends StatelessWidget {
             scale: scale,
             offset: offset,
             regionResults: regionResults,
+            regionAllianceResults: regionAllianceResults,
+            useAllianceColors: useAllianceColors,
             onRegionTap: onRegionTap,
           ),
         ),
@@ -51,6 +58,8 @@ class MapPainter extends CustomPainter {
   final double scale;
   final Offset offset;
   final Map<String, RegionResult>? regionResults;
+  final Map<String, RegionAllianceResult>? regionAllianceResults;
+  final bool useAllianceColors;
   final Function(String regionId)? onRegionTap;
 
   MapPainter({
@@ -58,6 +67,8 @@ class MapPainter extends CustomPainter {
     required this.scale,
     required this.offset,
     this.regionResults,
+    this.regionAllianceResults,
+    this.useAllianceColors = false,
     this.onRegionTap,
   });
 
@@ -96,8 +107,13 @@ class MapPainter extends CustomPainter {
 
       // Bölge rengini belirle
       Color regionColor = Colors.grey.shade300;
-      
-      if (regionResults != null && regionResults!.containsKey(regionId)) {
+      if (useAllianceColors &&
+          regionAllianceResults != null &&
+          regionAllianceResults!.containsKey(regionId)) {
+        final result = regionAllianceResults![regionId]!;
+        regionColor = colorForAlliance(result.winnerAlliance);
+      } else if (regionResults != null &&
+          regionResults!.containsKey(regionId)) {
         final result = regionResults![regionId]!;
         regionColor = colorForParty(result.winner);
       }
@@ -157,7 +173,9 @@ class MapPainter extends CustomPainter {
       oldDelegate.features != features ||
       oldDelegate.scale != scale ||
       oldDelegate.offset != offset ||
-      oldDelegate.regionResults != regionResults;
+      oldDelegate.regionResults != regionResults ||
+      oldDelegate.regionAllianceResults != regionAllianceResults ||
+      oldDelegate.useAllianceColors != useAllianceColors;
 
   @override
   bool? hitTest(Offset position) => true;
@@ -169,11 +187,21 @@ class MapPainter extends CustomPainter {
 class InteractiveMapWidget extends StatefulWidget {
   final List<dynamic> features;
   final Map<String, RegionResult>? regionResults;
+  final Map<String, RegionAllianceResult>? regionAllianceResults;
+  final bool useAllianceColors;
   final Function(String regionId)? onRegionTap;
+  final double? scale;
+  final Offset? offset;
+  final Function(double scale, Offset offset)? onTransform;
 
   const InteractiveMapWidget({
     required this.features,
+    this.regionAllianceResults,
+    this.useAllianceColors = false,
+    this.scale,
+    this.offset,
     this.regionResults,
+    this.onTransform,
     this.onRegionTap,
     super.key,
   });
@@ -183,12 +211,22 @@ class InteractiveMapWidget extends StatefulWidget {
 }
 
 class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
-  double _scale = 1.0;
-  Offset _offset = Offset.zero;
+  late double _scale;
+  late Offset _offset;
   String? _hoveredRegion;
 
   @override
+  void initState() {
+    super.initState();
+    _scale = widget.scale ?? 1.0;
+    _offset = widget.offset ?? Offset.zero;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    _scale = widget.scale ?? _scale;
+    _offset = widget.offset ?? _offset;
+
     return Listener(
       onPointerDown: (event) => _handlePointerDown(event),
       onPointerHover: (event) => _handlePointerHover(event),
@@ -198,6 +236,7 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
             _scale = (_scale * details.scale).clamp(0.5, 3.0);
             _offset = _offset + details.focalPointDelta;
           });
+          widget.onTransform?.call(_scale, _offset);
         },
         child: SizedBox.expand(
           child: CustomPaint(
@@ -206,6 +245,8 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
               scale: _scale,
               offset: _offset,
               regionResults: widget.regionResults,
+              regionAllianceResults: widget.regionAllianceResults,
+              useAllianceColors: widget.useAllianceColors,
               hoveredRegion: _hoveredRegion,
             ),
           ),
@@ -324,6 +365,8 @@ class InteractiveMapPainter extends CustomPainter {
   final double scale;
   final Offset offset;
   final Map<String, RegionResult>? regionResults;
+  final Map<String, RegionAllianceResult>? regionAllianceResults;
+  final bool useAllianceColors;
   final String? hoveredRegion;
 
   InteractiveMapPainter({
@@ -331,6 +374,8 @@ class InteractiveMapPainter extends CustomPainter {
     required this.scale,
     required this.offset,
     this.regionResults,
+    this.regionAllianceResults,
+    this.useAllianceColors = false,
     this.hoveredRegion,
   });
 
@@ -363,8 +408,13 @@ class InteractiveMapPainter extends CustomPainter {
       if (geom == null) continue;
 
       Color regionColor = Colors.grey.shade300;
-      
-      if (regionResults != null && regionResults!.containsKey(regionId)) {
+      if (useAllianceColors &&
+          regionAllianceResults != null &&
+          regionAllianceResults!.containsKey(regionId)) {
+        final result = regionAllianceResults![regionId]!;
+        regionColor = colorForAlliance(result.winnerAlliance);
+      } else if (regionResults != null &&
+          regionResults!.containsKey(regionId)) {
         final result = regionResults![regionId]!;
         regionColor = colorForParty(result.winner);
       }
@@ -435,5 +485,7 @@ class InteractiveMapPainter extends CustomPainter {
       oldDelegate.scale != scale ||
       oldDelegate.offset != offset ||
       oldDelegate.regionResults != regionResults ||
+      oldDelegate.regionAllianceResults != regionAllianceResults ||
+      oldDelegate.useAllianceColors != useAllianceColors ||
       oldDelegate.hoveredRegion != hoveredRegion;
 }

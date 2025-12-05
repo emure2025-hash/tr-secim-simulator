@@ -4,10 +4,14 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'map_widget.dart';
 import 'region_calculator.dart';
 import 'region_detail_dialog.dart';
+import 'alliance.dart';
+import 'alliance_calculator.dart';
+import 'preset_parties.dart';
+import 'alliance_detail_dialog.dart';
+import 'map_mode.dart';
+import 'result_screen.dart';
+import 'alliance_manager_screen.dart';
 
-// -------------------------------------------------------------
-// ANA SAYFA – Harita ve Oy Girişi Birlikte Kaydırılabilir
-// -------------------------------------------------------------
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
@@ -20,7 +24,10 @@ class _MainPageState extends State<MainPage> {
   Map<String, int>? result;
   Map<String, double> lastVotes = {};
   double lastThreshold = 0.0;
-  Map<String, RegionResult>? regionResults; // Bölge sonuçları
+  Map<String, RegionResult>? regionResults;
+  Map<String, RegionAllianceResult>? regionAllianceResults;
+  List<Alliance> alliances = [];
+  MapMode mapMode = MapMode.party;
   List<dynamic> features = [];
   double mapScale = 1.0;
   Offset mapOffset = Offset.zero;
@@ -41,45 +48,56 @@ class _MainPageState extends State<MainPage> {
       setState(() {
         features = decoded["features"] as List<dynamic>;
       });
-      
+
       debugPrint("✅ GeoJSON yüklendi: ${features.length} bölge");
     } catch (e) {
       debugPrint("❌ GeoJSON yüklenemedi: $e");
     }
   }
 
-  /// D'Hondt metoduna göre milletvekili dağılımı
   Map<String, int> _calculateParliament(
     Map<String, double> votes,
     double threshold,
   ) {
-    // Bölge bazlı hesaplama yap
     final regions = calculateAllRegions(
       nationalVotes: votes,
       threshold: threshold,
     );
-    
+
+    final regionsAlliance = calculateAllRegionAlliances(
+      nationalVotes: votes,
+      alliances: alliances,
+      threshold: threshold,
+    );
+
     setState(() {
       regionResults = regions;
+      regionAllianceResults = regionsAlliance;
     });
-    
-    // Toplam milletvekili sayısını hesapla
+
     final Map<String, int> totalSeats = {
       for (var party in votes.keys) party: 0
     };
-    
+
     regions.forEach((regionId, result) {
       result.seats.forEach((party, seats) {
         totalSeats[party] = (totalSeats[party] ?? 0) + seats;
       });
     });
-    
+
     return totalSeats;
   }
 
   void _handleRegionTap(String regionId) {
-    if (regionResults != null && regionResults!.containsKey(regionId)) {
-      showRegionDetail(context, regionResults![regionId]!);
+    if (mapMode == MapMode.party) {
+      if (regionResults != null && regionResults!.containsKey(regionId)) {
+        showRegionDetail(context, regionResults![regionId]!);
+      }
+    } else {
+      if (regionAllianceResults != null &&
+          regionAllianceResults!.containsKey(regionId)) {
+        showAllianceRegionDetail(context, regionAllianceResults![regionId]!);
+      }
     }
   }
 
@@ -100,6 +118,12 @@ class _MainPageState extends State<MainPage> {
                 features: features,
                 mapScale: mapScale,
                 mapOffset: mapOffset,
+                alliances: alliances,
+                onAlliancesChanged: (newAlliances) {
+                  setState(() {
+                    alliances = newAlliances;
+                  });
+                },
                 onMapUpdate: (scale, offset) {
                   setState(() {
                     mapScale = scale;
@@ -122,8 +146,22 @@ class _MainPageState extends State<MainPage> {
                 features: features,
                 mapScale: mapScale,
                 mapOffset: mapOffset,
+                onMapUpdate: (scale, offset) {
+                  setState(() {
+                    mapScale = scale;
+                    mapOffset = offset;
+                  });
+                },
                 votes: lastVotes,
                 regionResults: regionResults,
+                regionAllianceResults: regionAllianceResults,
+                alliances: alliances,
+                mapMode: mapMode,
+                onMapModeChanged: (mode) {
+                  setState(() {
+                    mapMode = mode;
+                  });
+                },
                 onRegionTap: _handleRegionTap,
                 onBack: () {
                   setState(() {
@@ -137,13 +175,12 @@ class _MainPageState extends State<MainPage> {
   }
 }
 
-// -------------------------------------------------------------
-// OY GİRİŞ EKRANI (HARİTA + PANEL BİRLİKTE)
-// -------------------------------------------------------------
 class VoteInputScreen extends StatefulWidget {
   final List<dynamic> features;
   final double mapScale;
   final Offset mapOffset;
+  final List<Alliance> alliances;
+  final Function(List<Alliance>) onAlliancesChanged;
   final Function(double, Offset) onMapUpdate;
   final Function(Map<String, double>, double) onSimulate;
 
@@ -151,6 +188,8 @@ class VoteInputScreen extends StatefulWidget {
     required this.features,
     required this.mapScale,
     required this.mapOffset,
+    required this.alliances,
+    required this.onAlliancesChanged,
     required this.onMapUpdate,
     required this.onSimulate,
     super.key,
@@ -171,15 +210,24 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
   };
 
   double threshold = 0.0;
+  bool showPresetParties = false;
 
   double get total => votes.values.fold<double>(0.0, (sum, v) => sum + v);
 
-  void _addParty() {
+  void _addPartyFromPreset(String partyName) {
+    if (!votes.containsKey(partyName)) {
+      setState(() {
+        votes[partyName] = 0.0;
+      });
+    }
+  }
+
+  void _addCustomParty() {
     final controller = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("Yeni Parti Ekle"),
+        title: const Text("Özel Parti Ekle"),
         content: TextField(
           controller: controller,
           decoration: const InputDecoration(
@@ -215,12 +263,26 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
     });
   }
 
+  void _manageAlliances() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AllianceManagerScreen(
+          allParties: votes.keys.toList(),
+          currentAlliances: widget.alliances,
+          onSave: (newAlliances) {
+            widget.onAlliancesChanged(newAlliances);
+          },
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
       child: Column(
         children: [
-          // --------------------- HARİTA BÖLÜMÜ ---------------------
           SizedBox(
             height: 350,
             child: widget.features.isEmpty
@@ -229,7 +291,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                     features: widget.features,
                     scale: widget.mapScale,
                     offset: widget.mapOffset,
-                    regionResults: null, // Giriş ekranında sonuç yok
+                    regionResults: null,
                     onScaleUpdate: (details) {
                       widget.onMapUpdate(
                         (widget.mapScale * details.scale).clamp(0.5, 3.0),
@@ -238,8 +300,6 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                     },
                   ),
           ),
-
-          // --------------------- OY GİRİŞ PANELİ ---------------------
           Container(
             color: Colors.grey.shade100,
             padding: const EdgeInsets.all(16),
@@ -253,7 +313,50 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // SEÇİM BARAJI
+                // İttifak Yönetimi Butonu
+                if (widget.alliances.isNotEmpty)
+                  Card(
+                    color: Colors.blue.shade50,
+                    child: ListTile(
+                      leading: Icon(Icons.groups, color: Colors.blue.shade700),
+                      title: Text(
+                        "${widget.alliances.length} İttifak Tanımlı",
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      trailing: ElevatedButton.icon(
+                        onPressed: _manageAlliances,
+                        icon: const Icon(Icons.edit, size: 18),
+                        label: const Text("Düzenle"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade700,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (widget.alliances.isEmpty)
+                  Card(
+                    color: Colors.orange.shade50,
+                    child: ListTile(
+                      leading:
+                          Icon(Icons.info_outline, color: Colors.orange.shade700),
+                      title: const Text("İttifak tanımlanmadı"),
+                      subtitle: const Text("Parti bazlı hesaplama yapılacak"),
+                      trailing: ElevatedButton.icon(
+                        onPressed: _manageAlliances,
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text("İttifak Oluştur"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.shade700,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                const SizedBox(height: 16),
+
+                // Seçim Barajı
                 Card(
                   color: Colors.amber.shade50,
                   child: Padding(
@@ -300,20 +403,13 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                           activeColor: Colors.amber.shade700,
                           onChanged: (v) => setState(() => threshold = v),
                         ),
-                        Text(
-                          "Barajı geçemeyen partiler milletvekili alamaz",
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
                       ],
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                // PARTİLER
+                // Partiler
                 for (var p in votes.keys)
                   Card(
                     margin: const EdgeInsets.only(bottom: 12),
@@ -336,8 +432,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                               ),
                               if (votes.length > 2)
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline,
-                                      size: 20),
+                                  icon: const Icon(Icons.delete_outline, size: 20),
                                   onPressed: () => _removeParty(p),
                                   tooltip: "Partiyi Kaldır",
                                 ),
@@ -374,19 +469,55 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                     ),
                   ),
 
-                // PARTİ EKLE BUTONU
-                OutlinedButton.icon(
-                  onPressed: _addParty,
-                  icon: const Icon(Icons.add),
-                  label: const Text("Yeni Parti Ekle"),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
+                // Parti Ekle Butonları
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            showPresetParties = !showPresetParties;
+                          });
+                        },
+                        icon: const Icon(Icons.list),
+                        label: const Text("Hazır Partiler"),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _addCustomParty,
+                        icon: const Icon(Icons.add),
+                        label: const Text("Özel Parti"),
+                      ),
+                    ),
+                  ],
                 ),
+
+                // Hazır Parti Listesi
+                if (showPresetParties)
+                  Card(
+                    margin: const EdgeInsets.only(top: 12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: PresetParties.allParties
+                            .where((p) => !votes.containsKey(p))
+                            .map((party) => ActionChip(
+                                  label: Text(party),
+                                  onPressed: () => _addPartyFromPreset(party),
+                                  avatar: const Icon(Icons.add, size: 16),
+                                ))
+                            .toList(),
+                      ),
+                    ),
+                  ),
 
                 const SizedBox(height: 16),
 
-                // TOPLAM GÖSTERGESİ
+                // Toplam
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -427,7 +558,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
 
                 const SizedBox(height: 16),
 
-                // SİMÜLASYON BUTONU
+                // Simülasyon Butonu
                 ElevatedButton(
                   onPressed: (total - 100).abs() < 0.5
                       ? () => widget.onSimulate(votes, threshold)
@@ -454,182 +585,4 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
   }
 }
 
-// -------------------------------------------------------------
-// SONUÇ EKRANI (HARİTA + SONUÇLAR)
-// -------------------------------------------------------------
-class ResultScreen extends StatelessWidget {
-  final Map<String, int> result;
-  final List<dynamic> features;
-  final double mapScale;
-  final Offset mapOffset;
-  final Map<String, double> votes;
-  final Map<String, RegionResult>? regionResults;
-  final Function(String)? onRegionTap;
-  final VoidCallback onBack;
-
-  const ResultScreen({
-    required this.result,
-    required this.features,
-    required this.mapScale,
-    required this.mapOffset,
-    required this.votes,
-    this.regionResults,
-    this.onRegionTap,
-    required this.onBack,
-    super.key,
-  });
-
-  int get totalSeats => result.values.fold<int>(0, (sum, v) => sum + v);
-
-  @override
-  Widget build(BuildContext context) {
-    final sorted = result.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          // --------------------- HARİTA BÖLÜMÜ ---------------------
-          SizedBox(
-            height: 350,
-            child: features.isEmpty
-                ? const Center(child: CircularProgressIndicator())
-                : Stack(
-                    children: [
-                      InteractiveMapWidget(
-                        features: features,
-                        regionResults: regionResults,
-                        onRegionTap: onRegionTap,
-                      ),
-                      Positioned(
-                        top: 16,
-                        right: 16,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.touch_app,
-                                size: 20,
-                                color: Colors.blueGrey,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                "Bölgelere tıklayın",
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.blueGrey.shade700,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-          ),
-
-          // --------------------- SONUÇ PANELİ ---------------------
-          Container(
-            color: Colors.grey.shade100,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                const Text(
-                  "Milletvekili Dağılımı",
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Toplam: $totalSeats MV",
-                  style: const TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-
-                // Sonuç listesi
-                ...sorted.map((entry) {
-                  final percentage =
-                      totalSeats > 0 ? (entry.value / totalSeats * 100) : 0.0;
-
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            flex: 2,
-                            child: Text(
-                              entry.key,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            flex: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  "${entry.value} MV",
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 18,
-                                  ),
-                                ),
-                                Text(
-                                  "%${percentage.toStringAsFixed(1)}",
-                                  style: TextStyle(
-                                    color: Colors.grey.shade600,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: onBack,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueGrey.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    minimumSize: const Size(double.infinity, 50),
-                  ),
-                  child: const Text(
-                    "Geri Dön ve Oyları Değiştir",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// ResultScreen ve AllianceManagerScreen için devam dosyaları gerekiyor...
