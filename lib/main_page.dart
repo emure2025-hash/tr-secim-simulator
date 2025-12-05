@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'map_widget.dart';
+import 'region_calculator.dart';
+import 'region_detail_dialog.dart';
 
 // -------------------------------------------------------------
 // ANA SAYFA – Harita ve Oy Girişi Birlikte Kaydırılabilir
@@ -16,7 +18,9 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   bool showInput = true;
   Map<String, int>? result;
-  Map<String, double> lastVotes = {}; // Son oy oranlarını sakla
+  Map<String, double> lastVotes = {};
+  double lastThreshold = 0.0;
+  Map<String, RegionResult>? regionResults; // Bölge sonuçları
   List<dynamic> features = [];
   double mapScale = 1.0;
   Offset mapOffset = Offset.zero;
@@ -49,49 +53,34 @@ class _MainPageState extends State<MainPage> {
     Map<String, double> votes,
     double threshold,
   ) {
-    const totalSeats = 600;
-
-    // Barajı geçemeyen partileri filtrele
-    final eligibleVotes = Map<String, double>.fromEntries(
-      votes.entries.where((e) => e.value >= threshold),
+    // Bölge bazlı hesaplama yap
+    final regions = calculateAllRegions(
+      nationalVotes: votes,
+      threshold: threshold,
     );
-
-    if (eligibleVotes.isEmpty) {
-      return {for (final entry in votes.entries) entry.key: 0};
-    }
-
-    // Her parti için mutlak oy sayısını hesapla
-    final Map<String, double> absoluteVotes = {};
-    eligibleVotes.forEach((party, percent) {
-      absoluteVotes[party] = percent * 10000;
+    
+    setState(() {
+      regionResults = regions;
     });
-
-    // D'Hondt metodu
-    final Map<String, int> seats = {for (var p in eligibleVotes.keys) p: 0};
-
-    for (int i = 0; i < totalSeats; i++) {
-      String? maxParty;
-      double maxQuotient = 0;
-
-      absoluteVotes.forEach((party, votes) {
-        final quotient = votes / (seats[party]! + 1);
-        if (quotient > maxQuotient) {
-          maxQuotient = quotient;
-          maxParty = party;
-        }
+    
+    // Toplam milletvekili sayısını hesapla
+    final Map<String, int> totalSeats = {
+      for (var party in votes.keys) party: 0
+    };
+    
+    regions.forEach((regionId, result) {
+      result.seats.forEach((party, seats) {
+        totalSeats[party] = (totalSeats[party] ?? 0) + seats;
       });
-
-      if (maxParty != null) {
-        seats[maxParty!] = seats[maxParty!]! + 1;
-      }
-    }
-
-    // Barajı geçemeyen partilere 0 sandalye
-    votes.keys.where((p) => !eligibleVotes.containsKey(p)).forEach((p) {
-      seats[p] = 0;
     });
+    
+    return totalSeats;
+  }
 
-    return seats;
+  void _handleRegionTap(String regionId) {
+    if (regionResults != null && regionResults!.containsKey(regionId)) {
+      showRegionDetail(context, regionResults![regionId]!);
+    }
   }
 
   @override
@@ -121,6 +110,7 @@ class _MainPageState extends State<MainPage> {
                   final r = _calculateParliament(votes, threshold);
                   setState(() {
                     lastVotes = Map<String, double>.from(votes);
+                    lastThreshold = threshold;
                     result = r;
                     showInput = false;
                   });
@@ -132,7 +122,9 @@ class _MainPageState extends State<MainPage> {
                 features: features,
                 mapScale: mapScale,
                 mapOffset: mapOffset,
-                votes: lastVotes, // Son oy oranlarını da geçirebilirsiniz
+                votes: lastVotes,
+                regionResults: regionResults,
+                onRegionTap: _handleRegionTap,
                 onBack: () {
                   setState(() {
                     showInput = true;
@@ -178,7 +170,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
     "DIGER": 0.0,
   };
 
-  double threshold = 0.0; // Seçim barajı başlangıç değeri %0
+  double threshold = 0.0;
 
   double get total => votes.values.fold<double>(0.0, (sum, v) => sum + v);
 
@@ -237,7 +229,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                     features: widget.features,
                     scale: widget.mapScale,
                     offset: widget.mapOffset,
-                    nationalVotes: const {}, // OY ORANLARINI HARITAYA GÖNDER
+                    regionResults: null, // Giriş ekranında sonuç yok
                     onScaleUpdate: (details) {
                       widget.onMapUpdate(
                         (widget.mapScale * details.scale).clamp(0.5, 3.0),
@@ -247,7 +239,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                   ),
           ),
 
-          // --------------------- OY GİRİŞ PANELI ---------------------
+          // --------------------- OY GİRİŞ PANELİ ---------------------
           Container(
             color: Colors.grey.shade100,
             padding: const EdgeInsets.all(16),
@@ -303,7 +295,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                           value: threshold,
                           min: 0,
                           max: 10,
-                          divisions: 20, // 0.5'lik hassasiyet
+                          divisions: 20,
                           label: "%${threshold.toStringAsFixed(1)}",
                           activeColor: Colors.amber.shade700,
                           onChanged: (v) => setState(() => threshold = v),
@@ -373,7 +365,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                             value: votes[p]!,
                             min: 0,
                             max: 60,
-                            divisions: 600, // 0.1'lik hassasiyet
+                            divisions: 600,
                             label: "%${votes[p]!.toStringAsFixed(1)}",
                             onChanged: (v) => setState(() => votes[p] = v),
                           ),
@@ -471,6 +463,8 @@ class ResultScreen extends StatelessWidget {
   final double mapScale;
   final Offset mapOffset;
   final Map<String, double> votes;
+  final Map<String, RegionResult>? regionResults;
+  final Function(String)? onRegionTap;
   final VoidCallback onBack;
 
   const ResultScreen({
@@ -479,6 +473,8 @@ class ResultScreen extends StatelessWidget {
     required this.mapScale,
     required this.mapOffset,
     required this.votes,
+    this.regionResults,
+    this.onRegionTap,
     required this.onBack,
     super.key,
   });
@@ -498,18 +494,55 @@ class ResultScreen extends StatelessWidget {
             height: 350,
             child: features.isEmpty
                 ? const Center(child: CircularProgressIndicator())
-                : MapWidget(
-                    features: features,
-                    scale: mapScale,
-                    offset: mapOffset,
-                    nationalVotes: votes,
-                    onScaleUpdate: (details) {
-                      // Sonuç ekranında harita sabit
-                    },
+                : Stack(
+                    children: [
+                      InteractiveMapWidget(
+                        features: features,
+                        regionResults: regionResults,
+                        onRegionTap: onRegionTap,
+                      ),
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.touch_app,
+                                size: 20,
+                                color: Colors.blueGrey,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                "Bölgelere tıklayın",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blueGrey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
           ),
 
-          // --------------------- SONUÇ PANELI ---------------------
+          // --------------------- SONUÇ PANELİ ---------------------
           Container(
             color: Colors.grey.shade100,
             padding: const EdgeInsets.all(16),
@@ -600,6 +633,3 @@ class ResultScreen extends StatelessWidget {
     );
   }
 }
-
-// ESKİ ResultPanel silindi, artık ResultScreen kullanılıyor
-
