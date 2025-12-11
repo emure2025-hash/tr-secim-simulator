@@ -115,7 +115,10 @@ class MapPainter extends CustomPainter {
       } else if (regionResults != null &&
           regionResults!.containsKey(regionId)) {
         final result = regionResults![regionId]!;
-        regionColor = colorForParty(result.winner);
+        final leadingParty = _partyWithHighestVote(result.votes);
+        if (leadingParty != null) {
+          regionColor = colorForParty(leadingParty);
+        }
       }
 
       final fillPaint = Paint()
@@ -416,7 +419,10 @@ class InteractiveMapPainter extends CustomPainter {
       } else if (regionResults != null &&
           regionResults!.containsKey(regionId)) {
         final result = regionResults![regionId]!;
-        regionColor = colorForParty(result.winner);
+        final leadingParty = _partyWithHighestVote(result.votes);
+        if (leadingParty != null) {
+          regionColor = colorForParty(leadingParty);
+        }
       }
 
       // Hover efekti
@@ -488,4 +494,22 @@ class InteractiveMapPainter extends CustomPainter {
       oldDelegate.regionAllianceResults != regionAllianceResults ||
       oldDelegate.useAllianceColors != useAllianceColors ||
       oldDelegate.hoveredRegion != hoveredRegion;
+}
+
+/// Bölgedeki en yüksek oy oranına sahip partiyi döndürür
+String? _partyWithHighestVote(Map<String, double> votes) {
+  if (votes.isEmpty) return null;
+
+  String? leader;
+  double maxVote = -double.infinity;
+
+  votes.forEach((party, vote) {
+    final value = vote.isFinite ? vote : 0.0;
+    if (leader == null || value > maxVote) {
+      leader = party;
+      maxVote = value;
+    }
+  });
+
+  return leader;
 }

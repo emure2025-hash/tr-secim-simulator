@@ -16,6 +16,10 @@ class PresetParties {
     'Anahtar',
     'Gelecek',
     'Deva',
+    'LDP',
+    'TKP',
+    'BTP',
+    'Saadet',
   ];
 
   static const List<String> majorParties = [
@@ -37,5 +41,9 @@ class PresetParties {
     'Anahtar',
     'Gelecek',
     'Deva',
+    'LDP',
+    'TKP',
+    'BTP',
+    'Saadet',
   ];
 }

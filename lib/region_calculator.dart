@@ -7,7 +7,7 @@ class RegionResult {
   final Region region;
   final Map<String, int> seats; // Parti -> Milletvekili sayısı
   final Map<String, double> votes; // Parti -> Oy oranı (%)
-  final String winner; // En çok milletvekili alan parti
+  final String winner; // En yuksek oy oranina sahip parti
   
   RegionResult({
     required this.region,
@@ -25,36 +25,37 @@ RegionResult calculateRegionResult({
 }) {
   // 1) Bölgesel oy oranlarını hesapla (ulusal oy * bölgesel güç)
   final Map<String, double> regionalVotes = {};
+  final strengthKey = strengthKeyForRegion(region.city, region.name, regionId: region.id);
   
   nationalVotes.forEach((party, nationalVote) {
     double strength = 1.0;
     
     switch (party) {
       case 'CHP':
-        strength = strengthFromMap(chpStrength, region.city);
+        strength = strengthFromMap(chpStrength, strengthKey);
         break;
       case 'AKP':
-        strength = strengthFromMap(akpStrength, region.city);
+        strength = strengthFromMap(akpStrength, strengthKey);
         break;
       case 'MHP':
-        strength = strengthFromMap(mhpStrength, region.city);
+        strength = strengthFromMap(mhpStrength, strengthKey);
         break;
       case 'İYİ Parti':
       case 'IYI Parti':
       case 'IYI':
-        strength = strengthFromMap(iyiStrength, region.city);
+        strength = strengthFromMap(iyiStrength, strengthKey);
         break;
       case 'HDP/DEM':
       case 'DEM':
       case 'HDP':
-        strength = strengthFromMap(demStrength, region.city);
+        strength = strengthFromMap(demStrength, strengthKey);
         break;
       case 'Diğer':
       case 'DIGER':
-        strength = strengthFromMap(otherStrength, region.city);
+        strength = strengthFromMap(otherStrength, strengthKey);
         break;
       default:
-        strength = strengthFromMap(otherStrength, region.city);
+        strength = strengthFromMap(otherStrength, strengthKey);
     }
     
     regionalVotes[party] = (nationalVote * strength).clamp(0.0, 100.0);
@@ -96,13 +97,14 @@ RegionResult calculateRegionResult({
     }
   }
   
-  // 5) Kazanan parti (en çok sandalye alan)
+  // 5) Kazanan parti (en yuksek oy orani alan)
   String winner = 'Yok';
-  int maxSeats = 0;
+  double maxVote = -double.infinity;
   
-  seats.forEach((party, seatCount) {
-    if (seatCount > maxSeats) {
-      maxSeats = seatCount;
+  regionalVotes.forEach((party, vote) {
+    final value = vote.isFinite ? vote : 0.0;
+    if (value > maxVote) {
+      maxVote = value;
       winner = party;
     }
   });

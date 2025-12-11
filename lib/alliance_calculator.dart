@@ -30,8 +30,9 @@ RegionAllianceResult calculateRegionAllianceResult({
   // 1) Bölgesel oy oranlarını hesapla (her parti için)
   final Map<String, double> regionalVotes = {};
 
+  final strengthKey = strengthKeyForRegion(region.city, region.name, regionId: region.id);
   nationalVotes.forEach((party, nationalVote) {
-    double strength = _getPartyStrength(party, region.city);
+    double strength = _getPartyStrength(party, strengthKey);
     regionalVotes[party] = (nationalVote * strength).clamp(0.0, 100.0);
   });
 
@@ -138,13 +139,14 @@ RegionAllianceResult calculateRegionAllianceResult({
     partySeatsInAlliance[allianceName] = partySeatsMap;
   });
 
-  // 8) Kazanan ittifak
+  // 8) Kazanan ittifak (en yuksek oy orani alan)
   String winnerAlliance = 'Yok';
-  int maxSeats = 0;
+  double maxVote = -double.infinity;
 
-  allianceSeats.forEach((alliance, seatCount) {
-    if (seatCount > maxSeats) {
-      maxSeats = seatCount;
+  allianceVotes.forEach((alliance, vote) {
+    final value = vote.isFinite ? vote : 0.0;
+    if (value > maxVote) {
+      maxVote = value;
       winnerAlliance = alliance;
     }
   });
@@ -218,31 +220,31 @@ Map<String, AllianceResult> calculateTotalAllianceResults(
   return results;
 }
 
-double _getPartyStrength(String party, String city) {
+double _getPartyStrength(String party, String strengthKey) {
   switch (party) {
     case 'CHP':
-      return strengthFromMap(chpStrength, city);
+      return strengthFromMap(chpStrength, strengthKey);
     case 'AKP':
-      return strengthFromMap(akpStrength, city);
+      return strengthFromMap(akpStrength, strengthKey);
     case 'MHP':
-      return strengthFromMap(mhpStrength, city);
+      return strengthFromMap(mhpStrength, strengthKey);
     case 'İYİ Parti':
     case 'IYI Parti':
     case 'IYI':
-      return strengthFromMap(iyiStrength, city);
+      return strengthFromMap(iyiStrength, strengthKey);
     case 'HDP/DEM':
     case 'DEM':
     case 'HDP':
-      return strengthFromMap(demStrength, city);
+      return strengthFromMap(demStrength, strengthKey);
     case 'Yeniden Refah':
-      return strengthFromMap(yenidenRefahStrength, city);
+      return strengthFromMap(yenidenRefahStrength, strengthKey);
     case 'Zafer':
-      return strengthFromMap(zaferStrength, city);
+      return strengthFromMap(zaferStrength, strengthKey);
     case 'HÜDAPAR':
-      return strengthFromMap(hudaparStrength, city);
+      return strengthFromMap(hudaparStrength, strengthKey);
     case 'Büyük Birlik':
-      return strengthFromMap(buyukBirlikStrength, city);
+      return strengthFromMap(buyukBirlikStrength, strengthKey);
     default:
-      return strengthFromMap(otherStrength, city);
+      return strengthFromMap(otherStrength, strengthKey);
   }
 }

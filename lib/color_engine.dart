@@ -24,6 +24,10 @@ final Map<String, Color> partyColors = {
   "Anahtar": const Color(0xFFFFA726), // Turuncu
   "Gelecek": const Color(0xFF5E35B1), // Mor
   "Deva": const Color(0xFF0097A7), // Turkuaz
+  "LDP": const Color(0xFFF4D03F), // Sarı
+  "TKP": const Color(0xFFB71C1C), // Koyu Kırmızı
+  "BTP": const Color(0xFF1565C0), // Mavi
+  "Saadet": const Color(0xFF880E4F), // Koyu Pembe
   
   "Diğer": Colors.grey,
   "DIGER": Colors.grey,
@@ -99,13 +103,27 @@ Color computeRegionColor({
         strength = strengthFromMap(buyukBirlikStrength, city);
         break;
       case 'EMEP':
-      case 'TİP':
-      case 'SOL':
-      case 'Anahtar':
-      case 'Gelecek':
-      case 'Deva':
-        strength = strengthFromMap(otherStrength, city);
+        strength = strengthFromMap(emepStrength, city);
         break;
+      case 'TİP':
+        strength = strengthFromMap(tipStrength, city);
+        break;
+      case 'SOL':
+        strength = strengthFromMap(solStrength, city);
+        break;
+      case 'Anahtar':
+        strength = strengthFromMap(anahtarStrength, city);
+        break;
+      case 'Gelecek':
+        strength = strengthFromMap(gelecekStrength, city);
+        break;
+      case 'Deva':
+        strength = strengthFromMap(devaStrength, city);
+        break;
+      case 'LDP':
+      case 'TKP':
+      case 'BTP':
+      case 'Saadet':
       case 'Diğer':
       case 'DIGER':
         strength = strengthFromMap(otherStrength, city);
