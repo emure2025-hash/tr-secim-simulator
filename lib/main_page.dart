@@ -62,6 +62,7 @@ class _MainPageState extends State<MainPage> {
     final regions = calculateAllRegions(
       nationalVotes: votes,
       threshold: threshold,
+      alliances: alliances,
     );
 
     final regionsAlliance = calculateAllRegionAlliances(

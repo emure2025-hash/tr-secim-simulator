@@ -5,13 +5,13 @@ const List<Region> regions = [
   Region(id: "01_1", city: "Adana", name: "Adana", seats: 15),
 
   Region(id: "02_1", city: "Adıyaman", name: "Adıyaman", seats: 5),
-  Region(id: "03_1", city: "Afyonkarahisar", name: "Afyonkarahisar", seats: 6),
+  Region(id: "03_1", city: "Afyon", name: "Afyonkarahisar", seats: 6),
   Region(id: "04_1", city: "Ağrı", name: "Ağrı", seats: 4),
   Region(id: "05_1", city: "Amasya", name: "Amasya", seats: 3),
 
-  Region(id: "06_1", city: "Ankara", name: "Ankara 1. Bölge", seats: 13),
-  Region(id: "06_2", city: "Ankara", name: "Ankara 2. Bölge", seats: 11),
-  Region(id: "06_3", city: "Ankara", name: "Ankara 3. Bölge", seats: 12),
+  Region(id: "06_1", city: "Ankara-1", name: "Ankara 1. Bölge", seats: 13),
+  Region(id: "06_2", city: "Ankara-2", name: "Ankara 2. Bölge", seats: 11),
+  Region(id: "06_3", city: "Ankara-3", name: "Ankara 3. Bölge", seats: 12),
 
   Region(id: "07_1", city: "Antalya", name: "Antalya", seats: 17),
   Region(id: "08_1", city: "Artvin", name: "Artvin", seats: 2),
@@ -24,8 +24,8 @@ const List<Region> regions = [
   Region(id: "14_1", city: "Bolu", name: "Bolu", seats: 3),
   Region(id: "15_1", city: "Burdur", name: "Burdur", seats: 3),
 
-  Region(id: "16_1", city: "Bursa", name: "Bursa 1. Bölge", seats: 10),
-  Region(id: "16_2", city: "Bursa", name: "Bursa 2. Bölge", seats: 10),
+  Region(id: "16_1", city: "Bursa-1", name: "Bursa 1. Bölge", seats: 10),
+  Region(id: "16_2", city: "Bursa-2", name: "Bursa 2. Bölge", seats: 10),
 
   Region(id: "17_1", city: "Çanakkale", name: "Çanakkale", seats: 4),
   Region(id: "18_1", city: "Çankırı", name: "Çankırı", seats: 2),
@@ -48,12 +48,12 @@ const List<Region> regions = [
   Region(id: "32_1", city: "Isparta", name: "Isparta", seats: 4),
   Region(id: "33_1", city: "Mersin", name: "Mersin", seats: 13),
 
-  Region(id: "34_1", city: "İstanbul", name: "İstanbul 1. Bölge", seats: 35),
-  Region(id: "34_2", city: "İstanbul", name: "İstanbul 2. Bölge", seats: 27),
-  Region(id: "34_3", city: "İstanbul", name: "İstanbul 3. Bölge", seats: 36),
+  Region(id: "34_1", city: "İstanbul-1", name: "İstanbul 1. Bölge", seats: 35),
+  Region(id: "34_2", city: "İstanbul-2", name: "İstanbul 2. Bölge", seats: 27),
+  Region(id: "34_3", city: "İstanbul-3", name: "İstanbul 3. Bölge", seats: 36),
 
-  Region(id: "35_1", city: "İzmir", name: "İzmir 1. Bölge", seats: 14),
-  Region(id: "35_2", city: "İzmir", name: "İzmir 2. Bölge", seats: 14),
+  Region(id: "35_1", city: "İzmir-1", name: "İzmir 1. Bölge", seats: 14),
+  Region(id: "35_2", city: "İzmir-2", name: "İzmir 2. Bölge", seats: 14),
 
   Region(id: "36_1", city: "Kars", name: "Kars", seats: 3),
   Region(id: "37_1", city: "Kastamonu", name: "Kastamonu", seats: 3),

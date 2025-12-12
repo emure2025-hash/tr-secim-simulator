@@ -1,15 +1,15 @@
 import 'alliance.dart';
 import 'region.dart';
 import 'regions.dart';
-import 'strengths.dart';
+import 'region_calculator.dart';
 
-/// Bölge bazında ittifak sonucu
+/// Bolge bazinda ittifak sonucu
 class RegionAllianceResult {
   final Region region;
-  final Map<String, int> allianceSeats; // İttifak -> Sandalye
-  final Map<String, double> allianceVotes; // İttifak -> Oy %
+  final Map<String, int> allianceSeats; // Ittifak -> Sandalye
+  final Map<String, double> allianceVotes; // Ittifak -> Oy %
   final String winnerAlliance;
-  final Map<String, Map<String, int>> partySeatsInAlliance; // İttifak -> Parti -> Sandalye
+  final Map<String, Map<String, int>> partySeatsInAlliance; // Ittifak -> Parti -> Sandalye
 
   RegionAllianceResult({
     required this.region,
@@ -20,31 +20,22 @@ class RegionAllianceResult {
   });
 }
 
-/// Tek bir bölge için ittifak bazlı D'Hondt hesaplaması
+/// Tek bir bolge icin ittifak sonuclarini parti bazli D'Hondt'tan ureterek hesaplar.
 RegionAllianceResult calculateRegionAllianceResult({
   required Region region,
   required Map<String, double> nationalVotes,
   required List<Alliance> alliances,
   required double threshold,
 }) {
-  // 1) Bölgesel oy oranlarını hesapla (her parti için)
-  final Map<String, double> regionalVotes = {};
+  // Parti bazli D'Hondt ve baraj: once parti sonucu hesapla
+  final regionResult = calculateRegionResult(
+    region: region,
+    nationalVotes: nationalVotes,
+    threshold: threshold,
+    alliances: alliances,
+  );
 
-  final strengthKey = strengthKeyForRegion(region.city, region.name, regionId: region.id);
-  nationalVotes.forEach((party, nationalVote) {
-    double strength = _getPartyStrength(party, strengthKey);
-    regionalVotes[party] = (nationalVote * strength).clamp(0.0, 100.0);
-  });
-
-  // 2) Normalize et
-  final total = regionalVotes.values.fold<double>(0.0, (sum, v) => sum + v);
-  if (total > 0) {
-    regionalVotes.forEach((key, value) {
-      regionalVotes[key] = (value / total) * 100.0;
-    });
-  }
-
-  // 3) İttifakları oluştur
+  // Ittifak haritasi
   final Map<String, List<String>> allianceMap = {};
   final Set<String> partiesInAlliance = {};
 
@@ -53,93 +44,41 @@ RegionAllianceResult calculateRegionAllianceResult({
     partiesInAlliance.addAll(alliance.parties);
   }
 
-  // İttifaksız partileri tek başına ittifak olarak ekle
-  for (final party in regionalVotes.keys) {
+  for (final party in regionResult.votes.keys) {
     if (!partiesInAlliance.contains(party)) {
       allianceMap[party] = [party];
     }
   }
 
-  // 4) İttifak bazında toplam oyları hesapla
+  // Ittifak oylarini hesapla
   final Map<String, double> allianceVotes = {};
   allianceMap.forEach((allianceName, parties) {
     double totalVote = 0;
     for (final party in parties) {
-      totalVote += regionalVotes[party] ?? 0;
+      totalVote += regionResult.votes[party] ?? 0;
     }
     allianceVotes[allianceName] = totalVote;
   });
 
-  // 5) Barajı geçen ittifakları filtrele
-  final eligible = allianceVotes.entries
-      .where((e) => e.value >= threshold)
-      .toList();
-
-  // 6) D'Hondt ile sandalye dağılımı (ittifak bazında)
-  final Map<String, int> allianceSeats = {
-    for (var key in allianceVotes.keys) key: 0
-  };
-
-  if (eligible.isNotEmpty) {
-    final List<MapEntry<String, double>> scores = [];
-
-    for (final entry in eligible) {
-      for (int d = 1; d <= region.seats; d++) {
-        scores.add(MapEntry(entry.key, entry.value / d));
-      }
-    }
-
-    scores.sort((a, b) => b.value.compareTo(a.value));
-
-    for (int i = 0; i < region.seats; i++) {
-      final winner = scores[i].key;
-      allianceSeats[winner] = allianceSeats[winner]! + 1;
-    }
-  }
-
-  // 7) Her ittifak içinde partilere sandalye dağıt (ittifakın aldığı sandalyeleri parti oylarına göre dağıt)
+  // Parti sandalyelerini ittifaka grupla
+  final Map<String, int> allianceSeats = {};
   final Map<String, Map<String, int>> partySeatsInAlliance = {};
 
-  allianceSeats.forEach((allianceName, seats) {
-    if (seats == 0) return;
+  allianceMap.forEach((allianceName, parties) {
+    int seatSum = 0;
+    final partySeats = <String, int>{};
 
-    final parties = allianceMap[allianceName]!;
-    final partySeatsMap = <String, int>{};
-
-    if (parties.length == 1) {
-      // Tek partili ittifak
-      partySeatsMap[parties[0]] = seats;
-    } else {
-      // Çok partili ittifak - D'Hondt ile dağıt
-      final partyVotesInAlliance = <String, double>{};
-      for (final party in parties) {
-        partyVotesInAlliance[party] = regionalVotes[party] ?? 0;
-      }
-
-      // İttifak içinde D'Hondt
-      final scores = <MapEntry<String, double>>[];
-      for (final party in parties) {
-        for (int d = 1; d <= seats; d++) {
-          scores.add(MapEntry(party, (partyVotesInAlliance[party] ?? 0) / d));
-        }
-      }
-
-      scores.sort((a, b) => b.value.compareTo(a.value));
-
-      for (final party in parties) {
-        partySeatsMap[party] = 0;
-      }
-
-      for (int i = 0; i < seats; i++) {
-        final winner = scores[i].key;
-        partySeatsMap[winner] = partySeatsMap[winner]! + 1;
-      }
+    for (final party in parties) {
+      final seatCount = regionResult.seats[party] ?? 0;
+      partySeats[party] = seatCount;
+      seatSum += seatCount;
     }
 
-    partySeatsInAlliance[allianceName] = partySeatsMap;
+    allianceSeats[allianceName] = seatSum;
+    partySeatsInAlliance[allianceName] = partySeats;
   });
 
-  // 8) Kazanan ittifak (en yuksek oy orani alan)
+  // Kazanan ittifak (en yuksek oy)
   String winnerAlliance = 'Yok';
   double maxVote = -double.infinity;
 
@@ -160,7 +99,7 @@ RegionAllianceResult calculateRegionAllianceResult({
   );
 }
 
-/// Tüm bölgeler için ittifak sonuçlarını hesapla
+/// Tum bolgeler icin ittifak sonuclarini hesapla
 Map<String, RegionAllianceResult> calculateAllRegionAlliances({
   required Map<String, double> nationalVotes,
   required List<Alliance> alliances,
@@ -180,24 +119,20 @@ Map<String, RegionAllianceResult> calculateAllRegionAlliances({
   return results;
 }
 
-/// Toplam ittifak sonuçlarını hesapla
+/// Toplam ittifak sonuclarini hesapla
 Map<String, AllianceResult> calculateTotalAllianceResults(
   Map<String, RegionAllianceResult> regionResults,
 ) {
   final Map<String, int> totalAllianceSeats = {};
   final Map<String, Map<String, int>> totalPartySeatsInAlliance = {};
 
-  // Her bölgedeki sonuçları topla
   regionResults.forEach((regionId, result) {
     result.allianceSeats.forEach((alliance, seats) {
       totalAllianceSeats[alliance] = (totalAllianceSeats[alliance] ?? 0) + seats;
     });
 
     result.partySeatsInAlliance.forEach((alliance, partySeats) {
-      if (!totalPartySeatsInAlliance.containsKey(alliance)) {
-        totalPartySeatsInAlliance[alliance] = {};
-      }
-
+      totalPartySeatsInAlliance.putIfAbsent(alliance, () => {});
       partySeats.forEach((party, seats) {
         totalPartySeatsInAlliance[alliance]![party] =
             (totalPartySeatsInAlliance[alliance]![party] ?? 0) + seats;
@@ -205,7 +140,6 @@ Map<String, AllianceResult> calculateTotalAllianceResults(
     });
   });
 
-  // AllianceResult'ları oluştur
   final Map<String, AllianceResult> results = {};
 
   totalAllianceSeats.forEach((alliance, totalSeats) {
@@ -213,38 +147,9 @@ Map<String, AllianceResult> calculateTotalAllianceResults(
       allianceName: alliance,
       totalSeats: totalSeats,
       partySeats: totalPartySeatsInAlliance[alliance] ?? {},
-      totalVotePercent: 0, // Bunu ayrıca hesaplayabiliriz
+      totalVotePercent: 0,
     );
   });
 
   return results;
-}
-
-double _getPartyStrength(String party, String strengthKey) {
-  switch (party) {
-    case 'CHP':
-      return strengthFromMap(chpStrength, strengthKey);
-    case 'AKP':
-      return strengthFromMap(akpStrength, strengthKey);
-    case 'MHP':
-      return strengthFromMap(mhpStrength, strengthKey);
-    case 'İYİ Parti':
-    case 'IYI Parti':
-    case 'IYI':
-      return strengthFromMap(iyiStrength, strengthKey);
-    case 'HDP/DEM':
-    case 'DEM':
-    case 'HDP':
-      return strengthFromMap(demStrength, strengthKey);
-    case 'Yeniden Refah':
-      return strengthFromMap(yenidenRefahStrength, strengthKey);
-    case 'Zafer':
-      return strengthFromMap(zaferStrength, strengthKey);
-    case 'HÜDAPAR':
-      return strengthFromMap(hudaparStrength, strengthKey);
-    case 'Büyük Birlik':
-      return strengthFromMap(buyukBirlikStrength, strengthKey);
-    default:
-      return strengthFromMap(otherStrength, strengthKey);
-  }
 }
