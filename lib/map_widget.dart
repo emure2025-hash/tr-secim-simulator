@@ -111,7 +111,11 @@ class MapPainter extends CustomPainter {
           regionAllianceResults != null &&
           regionAllianceResults!.containsKey(regionId)) {
         final result = regionAllianceResults![regionId]!;
-        regionColor = colorForAlliance(result.winnerAlliance);
+        final leader =
+            result.leadingPartyPerAlliance[result.winnerAlliance];
+        regionColor = leader != null
+            ? colorForParty(leader)
+            : colorForAlliance(result.winnerAlliance);
       } else if (regionResults != null &&
           regionResults!.containsKey(regionId)) {
         final result = regionResults![regionId]!;
@@ -415,7 +419,11 @@ class InteractiveMapPainter extends CustomPainter {
           regionAllianceResults != null &&
           regionAllianceResults!.containsKey(regionId)) {
         final result = regionAllianceResults![regionId]!;
-        regionColor = colorForAlliance(result.winnerAlliance);
+        final leader =
+            result.leadingPartyPerAlliance[result.winnerAlliance];
+        regionColor = leader != null
+            ? colorForParty(leader)
+            : colorForAlliance(result.winnerAlliance);
       } else if (regionResults != null &&
           regionResults!.containsKey(regionId)) {
         final result = regionResults![regionId]!;

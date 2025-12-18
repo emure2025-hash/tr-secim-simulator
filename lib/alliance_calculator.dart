@@ -10,6 +10,7 @@ class RegionAllianceResult {
   final Map<String, double> allianceVotes; // Ittifak -> Oy %
   final String winnerAlliance;
   final Map<String, Map<String, int>> partySeatsInAlliance; // Ittifak -> Parti -> Sandalye
+  final Map<String, String> leadingPartyPerAlliance; // Ittifak -> En yuksek oy alan parti
 
   RegionAllianceResult({
     required this.region,
@@ -17,6 +18,7 @@ class RegionAllianceResult {
     required this.allianceVotes,
     required this.winnerAlliance,
     required this.partySeatsInAlliance,
+    required this.leadingPartyPerAlliance,
   });
 }
 
@@ -63,19 +65,32 @@ RegionAllianceResult calculateRegionAllianceResult({
   // Parti sandalyelerini ittifaka grupla
   final Map<String, int> allianceSeats = {};
   final Map<String, Map<String, int>> partySeatsInAlliance = {};
+  final Map<String, String> leadingPartyPerAlliance = {};
 
   allianceMap.forEach((allianceName, parties) {
     int seatSum = 0;
     final partySeats = <String, int>{};
+    String? leadingParty;
+    double maxVoteInAlliance = -double.infinity;
 
     for (final party in parties) {
       final seatCount = regionResult.seats[party] ?? 0;
       partySeats[party] = seatCount;
       seatSum += seatCount;
+
+      final voteShare = nationalVotes[party] ?? 0; // Ulusal oy oranŽñ kullan
+      if (leadingParty == null || voteShare > maxVoteInAlliance) {
+        leadingParty = party;
+        maxVoteInAlliance = voteShare;
+      }
     }
 
     allianceSeats[allianceName] = seatSum;
     partySeatsInAlliance[allianceName] = partySeats;
+
+    if (leadingParty != null) {
+      leadingPartyPerAlliance[allianceName] = leadingParty;
+    }
   });
 
   // Kazanan ittifak (en yuksek oy)
@@ -96,6 +111,7 @@ RegionAllianceResult calculateRegionAllianceResult({
     allianceVotes: allianceVotes,
     winnerAlliance: winnerAlliance,
     partySeatsInAlliance: partySeatsInAlliance,
+    leadingPartyPerAlliance: leadingPartyPerAlliance,
   );
 }
 

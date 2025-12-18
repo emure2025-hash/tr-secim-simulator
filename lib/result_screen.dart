@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import 'alliance.dart';
@@ -6,6 +7,7 @@ import 'color_engine.dart';
 import 'map_mode.dart';
 import 'map_widget.dart';
 import 'region_calculator.dart';
+import 'seat_distribution_widget.dart';
 
 class ResultScreen extends StatefulWidget {
   final Map<String, int> result;
@@ -67,13 +69,28 @@ class _ResultScreenState extends State<ResultScreen> {
     final totalSeats = widget.result.values.fold<int>(0, (a, b) => a + b);
     final sortedResults = widget.result.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    final pieSections = sortedResults.map((entry) {
+      final seatShare =
+          totalSeats == 0 ? 0 : (entry.value / totalSeats * 100);
+      return PieChartSectionData(
+        color: colorForParty(entry.key),
+        value: entry.value.toDouble(),
+        title: "${seatShare.toStringAsFixed(1)}%",
+        titleStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+        radius: 55,
+      );
+    }).toList();
 
     final bool canShowAlliance = widget.alliances.isNotEmpty &&
         (widget.regionAllianceResults?.isNotEmpty ?? false);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Simülasyon Sonuçları"),
+        title: const Text("SimÇ¬lasyon SonuÇõlarŽñ"),
         backgroundColor: Colors.blueGrey.shade700,
         foregroundColor: Colors.white,
         leading: IconButton(
@@ -93,7 +110,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                   ButtonSegment(
                     value: MapMode.alliance,
-                    label: Text("İttifak"),
+                    label: Text("Žøttifak"),
                     icon: Icon(Icons.groups),
                   ),
                 ],
@@ -137,6 +154,64 @@ class _ResultScreenState extends State<ResultScreen> {
                     ),
             ),
             Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: SizedBox(
+                height: 280,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Koltuk Dağılımı (Pie)",
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Expanded(
+                                child: PieChart(
+                                  PieChartData(
+                                    sections: pieSections,
+                                    sectionsSpace: 2,
+                                    centerSpaceRadius: 36,
+                                    borderData: FlBorderData(show: false),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Card(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: SeatDistributionWidget(
+                            seatsByParty: widget.result,
+                            partyColors: partyColors,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -150,9 +225,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                   const SizedBox(height: 12),
                   ...sortedResults.map((entry) {
-                    final percent = totalSeats == 0
-                        ? 0
-                        : (entry.value / totalSeats * 100);
+                    final votePercent = widget.votes[entry.key] ?? 0.0;
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
@@ -170,7 +243,7 @@ class _ResultScreenState extends State<ResultScreen> {
                           ),
                         ),
                         subtitle: LinearProgressIndicator(
-                          value: percent / 100,
+                          value: votePercent / 100,
                           backgroundColor: Colors.grey.shade200,
                           color: colorForParty(entry.key),
                         ),
@@ -179,13 +252,13 @@ class _ResultScreenState extends State<ResultScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              "${entry.value} MV",
+                              "%${votePercent.toStringAsFixed(1)}",
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            Text("%${percent.toStringAsFixed(1)}"),
+                            Text("${entry.value} MV"),
                           ],
                         ),
                       ),

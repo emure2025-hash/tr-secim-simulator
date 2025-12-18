@@ -16,6 +16,12 @@ class AllianceRegionDetailDialog extends StatelessWidget {
     final region = result.region;
     final sortedAlliances = result.allianceSeats.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    Color allianceColor(String allianceName) {
+      final leading = result.leadingPartyPerAlliance[allianceName];
+      return leading != null
+          ? colorForParty(leading)
+          : colorForAlliance(allianceName);
+    }
 
     return Dialog(
       shape: RoundedRectangleBorder(
@@ -30,7 +36,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: colorForAlliance(result.winnerAlliance),
+                color: allianceColor(result.winnerAlliance),
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   topRight: Radius.circular(16),
@@ -80,11 +86,11 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: colorForAlliance(result.winnerAlliance)
+                        color: allianceColor(result.winnerAlliance)
                             .withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: colorForAlliance(result.winnerAlliance),
+                          color: allianceColor(result.winnerAlliance),
                           width: 2,
                         ),
                       ),
@@ -92,7 +98,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                         children: [
                           Icon(
                             Icons.emoji_events,
-                            color: colorForAlliance(result.winnerAlliance),
+                            color: allianceColor(result.winnerAlliance),
                             size: 32,
                           ),
                           const SizedBox(width: 12),
@@ -155,7 +161,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                     width: 12,
                                     height: 40,
                                     decoration: BoxDecoration(
-                                      color: colorForAlliance(allianceName),
+                                      color: allianceColor(allianceName),
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                   ),
@@ -175,7 +181,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                       vertical: 6,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: colorForAlliance(allianceName),
+                                      color: allianceColor(allianceName),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Text(
@@ -263,7 +269,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                 width: 12,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: colorForAlliance(entry.key),
+                                  color: allianceColor(entry.key),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                               ),
@@ -283,7 +289,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                     LinearProgressIndicator(
                                       value: entry.value / 100,
                                       backgroundColor: Colors.grey.shade200,
-                                      color: colorForAlliance(entry.key),
+                                      color: allianceColor(entry.key),
                                     ),
                                   ],
                                 ),
