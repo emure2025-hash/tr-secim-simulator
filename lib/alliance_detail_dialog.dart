@@ -11,15 +11,15 @@ class AllianceRegionDetailDialog extends StatelessWidget {
     required this.result,
   });
 
-  Widget _buildPartyLogo(String party) {
+  Widget _buildPartyLogo(String party, {double size = 12}) {
     final logoPath = logoForParty(party);
     if (logoPath == null) {
       return CircleAvatar(
-        radius: 6,
+        radius: size / 2,
         backgroundColor: colorForParty(party),
         child: Text(
           party.isNotEmpty ? party[0].toUpperCase() : "?",
-          style: const TextStyle(fontSize: 8, color: Colors.white),
+          style: TextStyle(fontSize: size / 1.5, color: Colors.white),
         ),
       );
     }
@@ -27,9 +27,24 @@ class AllianceRegionDetailDialog extends StatelessWidget {
     return ClipOval(
       child: Image.asset(
         logoPath,
-        width: 12,
-        height: 12,
+        width: size,
+        height: size,
         fit: BoxFit.contain,
+      ),
+    );
+  }
+
+  Widget _buildAllianceLeaderLogo(String allianceName) {
+    final leader = result.leadingPartyPerAlliance[allianceName];
+    if (leader != null) {
+      return _buildPartyLogo(leader, size: 24);
+    }
+    return CircleAvatar(
+      radius: 12,
+      backgroundColor: colorForAlliance(allianceName),
+      child: Text(
+        allianceName.isNotEmpty ? allianceName[0].toUpperCase() : "?",
+        style: const TextStyle(fontSize: 12, color: Colors.white),
       ),
     );
   }
@@ -188,14 +203,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                               // İttifak Başlığı
                               Row(
                                 children: [
-                                  Container(
-                                    width: 12,
-                                    height: 40,
-                                    decoration: BoxDecoration(
-                                      color: allianceColor(allianceName),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                  ),
+                                  _buildAllianceLeaderLogo(allianceName),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
@@ -308,14 +316,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                           padding: const EdgeInsets.all(12),
                           child: Row(
                             children: [
-                              Container(
-                                width: 12,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: allianceColor(allianceName),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
+                              _buildAllianceLeaderLogo(allianceName),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(

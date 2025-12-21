@@ -3,34 +3,34 @@ import 'strengths.dart';
 
 /// Partilerin renkleri (temiz isimlerle)
 final Map<String, Color> partyColors = {
-  "CHP": const Color(0xFFC00000),
-  "AKP": const Color(0xFFFF7A00),
-  "MHP": const Color(0xFF8B4513),
-  "İYİ Parti": const Color(0xFF00C8C8),
-  "IYI Parti": const Color(0xFF00C8C8),
-  "IYI": const Color(0xFF00C8C8),
-  "DEM": const Color(0xFF6A0DAD),
-  "HDP/DEM": const Color(0xFF6A0DAD),
-  "HDP": const Color(0xFF6A0DAD),
+  "CHP": const Color(0xFFD32F2F),
+  "AKP": const Color(0xFFF57C00),
+  "MHP": const Color(0xFF5D4037),
+  "??Y?? Parti": const Color(0xFF00ACC1),
+  "IYI Parti": const Color(0xFF00ACC1),
+  "IYI": const Color(0xFF00ACC1),
+  "DEM": const Color(0xFF7B1FA2),
+  "HDP/DEM": const Color(0xFF7B1FA2),
+  "HDP": const Color(0xFF7B1FA2),
   
   // Yeni Partiler
-  "Yeniden Refah": const Color(0xFF2E7D32), // Yeşil
-  "Zafer": const Color(0xFF8B0000), // Bordo
-  "HÜDAPAR": const Color(0xFF1B5E20), // Koyu Yeşil
-  "Büyük Birlik": const Color(0xFFE91E63), // Pembe
-  "EMEP": const Color(0xFFD32F2F), // Kırmızı
-  "TİP": const Color(0xFFC62828), // Koyu Kırmızı
+  "Yeniden Refah": const Color(0xFF2E7D32), // Ye?Yil
+  "Zafer": const Color(0xFF8E0000), // Bordo
+  "H?oDAPAR": const Color(0xFF1B5E20), // Koyu Ye?Yil
+  "B??y??k Birlik": const Color(0xFFE91E63), // Pembe
+  "EMEP": const Color(0xFFFBC02D), // Sar??
+  "T??P": const Color(0xFFB71C1C), // Koyu K??rm??z??
   "SOL": const Color(0xFF1976D2), // Mavi
-  "Anahtar": const Color(0xFFFFA726), // Turuncu
-  "Gelecek": const Color(0xFF5E35B1), // Mor
-  "Deva": const Color(0xFF0097A7), // Turkuaz
-  "LDP": const Color(0xFFF4D03F), // Sarı
-  "TKP": const Color(0xFFB71C1C), // Koyu Kırmızı
-  "BTP": const Color(0xFF1565C0), // Mavi
-  "Saadet": const Color(0xFF880E4F), // Koyu Pembe
+  "Anahtar": const Color(0xFFA1887F), // Gri-kahverengi
+  "Gelecek": const Color(0xFF66BB6A), // Ye?Yil
+  "Deva": const Color(0xFF0D47A1), // Koyu Mavi
+  "LDP": const Color(0xFF1565C0), // Mavi
+  "TKP": const Color(0xFFFFB74D), // A??k Turuncu
+  "BTP": const Color(0xFF5E35B1), // Mor
+  "Saadet": const Color(0xFFF48FB1), // A??k Pembe
   
-  "Diğer": Colors.grey,
-  "DIGER": Colors.grey,
+  "Di?Yer": const Color(0xFF9E9E9E),
+  "DIGER": const Color(0xFF9E9E9E),
 };
 
 /// İttifak renkleri

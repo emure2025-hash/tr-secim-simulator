@@ -25,6 +25,20 @@ class _VoteSummary {
   });
 }
 
+class _PieLegendEntry {
+  final String label;
+  final double percent;
+  final Color color;
+  final List<String> parties;
+
+  const _PieLegendEntry({
+    required this.label,
+    required this.percent,
+    required this.color,
+    required this.parties,
+  });
+}
+
 class ResultScreen extends StatefulWidget {
   final Map<String, int> result;
   final List<dynamic> features;
@@ -164,6 +178,83 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 
+  Widget _buildLegendLogo(String label, Color fallbackColor) {
+    final logoPath = logoForParty(label);
+    if (logoPath == null) {
+      return CircleAvatar(
+        radius: 8,
+        backgroundColor: fallbackColor,
+        child: Text(
+          _initials(label),
+          style: const TextStyle(fontSize: 9, color: Colors.white),
+        ),
+      );
+    }
+
+    return CircleAvatar(
+      radius: 8,
+      backgroundColor: Colors.white,
+      child: ClipOval(
+        child: Image.asset(
+          logoPath,
+          width: 16,
+          height: 16,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPieLegend(List<_PieLegendEntry> entries) {
+    if (entries.isEmpty) {
+      return const Center(
+        child: Text(
+          "Veri yok",
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: entries.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 6),
+      itemBuilder: (context, index) {
+        final entry = entries[index];
+        final hasAllianceLogos = entry.parties.length > 1;
+        return Row(
+          children: [
+            if (hasAllianceLogos)
+              SizedBox(
+                width: 44,
+                child: _buildAllianceLogos(entry.parties, entry.color),
+              )
+            else
+              _buildLegendLogo(entry.label, entry.color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                entry.label,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              "${entry.percent.toStringAsFixed(1)}%",
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   List<String> _orderedParties() {
     final ordered = <String>[];
     final seen = <String>{};
@@ -289,6 +380,19 @@ class _ResultScreenState extends State<ResultScreen> {
 
     final bool canShowAlliance = widget.alliances.isNotEmpty &&
         (widget.regionAllianceResults?.isNotEmpty ?? false);
+    final pieLegendEntries = sliderSummaries
+        .where((summary) => summary.seats > 0)
+        .map((summary) {
+          final seatShare =
+              totalSeats == 0 ? 0.0 : (summary.seats / totalSeats * 100);
+          return _PieLegendEntry(
+            label: summary.label,
+            percent: seatShare,
+            color: summary.color,
+            parties: summary.parties,
+          );
+        })
+        .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -422,13 +526,46 @@ class _ResultScreenState extends State<ResultScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     Expanded(
-                                      child: PieChart(
-                                        PieChartData(
-                                          sections: pieSections,
-                                          sectionsSpace: 2,
-                                          centerSpaceRadius: 36,
-                                          borderData: FlBorderData(show: false),
-                                        ),
+                                      child: LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final chart = PieChart(
+                                            PieChartData(
+                                              sections: pieSections,
+                                              sectionsSpace: 2,
+                                              centerSpaceRadius: 36,
+                                              borderData:
+                                                  FlBorderData(show: false),
+                                            ),
+                                          );
+
+                                          if (constraints.maxWidth < 260) {
+                                            return Column(
+                                              children: [
+                                                SizedBox(
+                                                  height: 120,
+                                                  child: _buildPieLegend(
+                                                    pieLegendEntries,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 8),
+                                                Expanded(child: chart),
+                                              ],
+                                            );
+                                          }
+
+                                          return Row(
+                                            children: [
+                                              SizedBox(
+                                                width: 140,
+                                                child: _buildPieLegend(
+                                                  pieLegendEntries,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(child: chart),
+                                            ],
+                                          );
+                                        },
                                       ),
                                     ),
                                   ],

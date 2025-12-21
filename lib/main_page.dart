@@ -396,8 +396,8 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
             Slider(
               value: votes[party]!,
               min: 0,
-              max: 60,
-              divisions: 600,
+              max: 100,
+              divisions: 1000,
               label: "%${votes[party]!.toStringAsFixed(1)}",
               onChanged: (v) => setState(() => votes[party] = v),
             ),
@@ -728,29 +728,17 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                     _buildAllianceSection(entry.key, entry.value),
 
                 // Parti Ekle Butonları
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            showPresetParties = !showPresetParties;
-                          });
-                        },
-                        icon: const Icon(Icons.list),
-                        label: const Text("Hazır Partiler"),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _addCustomParty,
-                        icon: const Icon(Icons.add),
-                        label: const Text("Özel Parti"),
-                      ),
-                    ),
-                  ],
+                OutlinedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      showPresetParties = !showPresetParties;
+                    });
+                  },
+                  icon: const Icon(Icons.list),
+                  label: const Text("Hazir Partiler"),
                 ),
+
+
 
                 // Hazır Parti Listesi
                 if (showPresetParties)
