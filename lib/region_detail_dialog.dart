@@ -11,6 +11,30 @@ class RegionDetailDialog extends StatelessWidget {
     required this.result,
   });
 
+  Widget _buildPartyLogo(String party) {
+    final logoPath = logoForParty(party);
+    if (logoPath == null) {
+      return CircleAvatar(
+        radius: 14,
+        backgroundColor: colorForParty(party),
+        child: Text(
+          party.isNotEmpty ? party[0].toUpperCase() : "?",
+          style: const TextStyle(fontSize: 12, color: Colors.white),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Image.asset(
+        logoPath,
+        width: 28,
+        height: 28,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final region = result.region;
@@ -92,6 +116,8 @@ class RegionDetailDialog extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
+                          _buildPartyLogo(result.winner),
+                          const SizedBox(width: 12),
                           Icon(
                             Icons.emoji_events,
                             color: colorForParty(result.winner),
@@ -142,16 +168,9 @@ class RegionDetailDialog extends StatelessWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: colorForParty(entry.key),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
+                        child: Row(
+                          children: [
+                              _buildPartyLogo(entry.key),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
@@ -203,16 +222,9 @@ class RegionDetailDialog extends StatelessWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: colorForParty(entry.key),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                              ),
+                        child: Row(
+                          children: [
+                              _buildPartyLogo(entry.key),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(

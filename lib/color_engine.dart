@@ -34,6 +34,33 @@ final Map<String, Color> partyColors = {
 };
 
 /// İttifak renkleri
+final Map<String, String> partyLogosByKey = {
+  "chp": "assets/logos/CHP_logo_(2024,_vertical_red).svg.png",
+  "akp": "assets/logos/akp.png",
+  "mhp": "assets/logos/mhp.png",
+  "iyiparti": "assets/logos/Logo_of_Good_Party.svg.png",
+  "iyi": "assets/logos/Logo_of_Good_Party.svg.png",
+  "dem": "assets/logos/dem.png",
+  "yenidenrefah": "assets/logos/Yeniden_Refah_Partisi_logo.svg.png",
+  "zafer": "assets/logos/Zafer_Partisi_Logo.png",
+  "hodapar": "assets/logos/hudapar.png",
+  "hudapar": "assets/logos/hudapar.png",
+  "hdapar": "assets/logos/hudapar.png",
+  "bykbirlik": "assets/logos/buyuk_birlik.png",
+  "buyukbirlik": "assets/logos/buyuk_birlik.png",
+  "emep": "assets/logos/Emek_Partisi_Logo.svg.png",
+  "tp": "assets/logos/tip.png",
+  "tip": "assets/logos/tip.png",
+  "sol": "assets/logos/Sol_Parti.svg.png",
+  "anahtar": "assets/logos/Anahtar_Parti.jpg",
+  "gelecek": "assets/logos/Gelecek-logo.svg.png",
+  "deva": "assets/logos/deva.png",
+  "ldp": "assets/logos/Ldp-logo.png",
+  "tkp": "assets/logos/TKP_logo_(2023).svg.png",
+  "btp": "assets/logos/Independent_Turkey_Party_Logo.svg.png",
+  "saadet": "assets/logos/Saadet_Partisi_Kare_Logo.svg.png",
+};
+
 final Map<String, Color> allianceColors = {
   "İttifak 1": const Color(0xFF1976D2),
   "İttifak 2": const Color(0xFFD32F2F),
@@ -49,6 +76,30 @@ Color colorForParty(String party) {
   final hash = party.hashCode & 0xFFFFFF;
   final hue = (hash % 360).toDouble();
   return HSLColor.fromAHSL(1, hue, 0.55, 0.55).toColor();
+}
+
+String _normalizePartyKey(String party) {
+  final buffer = StringBuffer();
+  for (final code in party.codeUnits) {
+    final isUpper = code >= 65 && code <= 90;
+    final isLower = code >= 97 && code <= 122;
+    final isDigit = code >= 48 && code <= 57;
+    if (isUpper || isLower || isDigit) {
+      buffer.writeCharCode(code);
+    }
+  }
+  return buffer.toString().toLowerCase();
+}
+
+String? logoForParty(String party) {
+  final key = _normalizePartyKey(party);
+  if (key.isEmpty) return null;
+  final direct = partyLogosByKey[key];
+  if (direct != null) return direct;
+  if (key.length <= 2 && key.contains('t') && key.contains('p')) {
+    return partyLogosByKey['tip'];
+  }
+  return null;
 }
 
 Color colorForAlliance(String allianceName) {
@@ -142,3 +193,28 @@ Color computeRegionColor({
   final winner = weighted.entries.reduce((a, b) => a.value > b.value ? a : b).key;
   return colorForParty(winner);
 }
+
+Color colorForAllianceFromVotes({
+  required String allianceName,
+  required List<String> parties,
+  required Map<String, double> votes,
+}) {
+  String? leader;
+  double maxVote = -double.infinity;
+
+  for (final party in parties) {
+    final vote = votes[party] ?? 0.0;
+    if (leader == null || vote > maxVote) {
+      leader = party;
+      maxVote = vote;
+    }
+  }
+
+  if (leader != null) {
+    return colorForParty(leader);
+  }
+
+  return colorForAlliance(allianceName);
+}
+
+

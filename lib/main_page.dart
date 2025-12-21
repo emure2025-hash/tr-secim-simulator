@@ -11,6 +11,7 @@ import 'alliance_detail_dialog.dart';
 import 'map_mode.dart';
 import 'result_screen.dart';
 import 'alliance_manager_screen.dart';
+import 'color_engine.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -24,6 +25,7 @@ class _MainPageState extends State<MainPage> {
   Map<String, int>? result;
   Map<String, double> lastVotes = {};
   double lastThreshold = 0.0;
+  List<String> lastPartyOrder = [];
   Map<String, RegionResult>? regionResults;
   Map<String, RegionAllianceResult>? regionAllianceResults;
   List<Alliance> alliances = [];
@@ -131,11 +133,12 @@ class _MainPageState extends State<MainPage> {
                     mapOffset = offset;
                   });
                 },
-                onSimulate: (votes, threshold) {
+                onSimulate: (votes, threshold, partyOrder) {
                   final r = _calculateParliament(votes, threshold);
                   setState(() {
                     lastVotes = Map<String, double>.from(votes);
                     lastThreshold = threshold;
+                    lastPartyOrder = List<String>.from(partyOrder);
                     result = r;
                     showInput = false;
                   });
@@ -154,6 +157,7 @@ class _MainPageState extends State<MainPage> {
                   });
                 },
                 votes: lastVotes,
+                partyOrder: lastPartyOrder,
                 regionResults: regionResults,
                 regionAllianceResults: regionAllianceResults,
                 alliances: alliances,
@@ -183,7 +187,7 @@ class VoteInputScreen extends StatefulWidget {
   final List<Alliance> alliances;
   final Function(List<Alliance>) onAlliancesChanged;
   final Function(double, Offset) onMapUpdate;
-  final Function(Map<String, double>, double) onSimulate;
+  final Function(Map<String, double>, double, List<String>) onSimulate;
 
   const VoteInputScreen({
     required this.features,
@@ -212,13 +216,34 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
 
   double threshold = 0.0;
   bool showPresetParties = false;
+  MapMode sliderMode = MapMode.party;
+  late List<String> partyOrder;
+
+  static const String _unalignedAllianceLabel = "Ittifaksiz";
 
   double get total => votes.values.fold<double>(0.0, (sum, v) => sum + v);
+
+  @override
+  void initState() {
+    super.initState();
+    partyOrder = votes.keys.toList();
+  }
+
+  @override
+  void didUpdateWidget(covariant VoteInputScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.alliances.isEmpty && sliderMode == MapMode.alliance) {
+      setState(() {
+        sliderMode = MapMode.party;
+      });
+    }
+  }
 
   void _addPartyFromPreset(String partyName) {
     if (!votes.containsKey(partyName)) {
       setState(() {
         votes[partyName] = 0.0;
+        partyOrder.add(partyName);
       });
     }
   }
@@ -247,6 +272,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                   !votes.containsKey(controller.text.trim())) {
                 setState(() {
                   votes[controller.text.trim()] = 0.0;
+                  partyOrder.add(controller.text.trim());
                 });
               }
               Navigator.pop(context);
@@ -261,6 +287,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
   void _removeParty(String party) {
     setState(() {
       votes.remove(party);
+      partyOrder.remove(party);
     });
   }
 
@@ -277,6 +304,236 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildPartyLogo(String party) {
+    final logoPath = logoForParty(party);
+    if (logoPath == null) {
+      return CircleAvatar(
+        radius: 12,
+        backgroundColor: colorForParty(party),
+        child: Text(
+          party.isNotEmpty ? party[0].toUpperCase() : "?",
+          style: const TextStyle(fontSize: 12, color: Colors.white),
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      child: Image.asset(
+        logoPath,
+        width: 24,
+        height: 24,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
+  Widget _buildPartySlider(
+    String party, {
+    required int dragIndex,
+    bool showDragHandle = false,
+  }) {
+    return Card(
+      key: ValueKey("party-$party"),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (showDragHandle)
+                  ReorderableDragStartListener(
+                    index: dragIndex,
+                    child: const Padding(
+                      padding: EdgeInsets.only(right: 8),
+                      child: Icon(Icons.drag_handle),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _buildPartyLogo(party),
+                ),
+                Expanded(
+                  child: Text(
+                    party,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                if (votes.length > 2)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20),
+                    onPressed: () => _removeParty(party),
+                    tooltip: "Partiyi Kaldir",
+                  ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blueGrey.shade700,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "%${votes[party]!.toStringAsFixed(1)}",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Slider(
+              value: votes[party]!,
+              min: 0,
+              max: 60,
+              divisions: 600,
+              label: "%${votes[party]!.toStringAsFixed(1)}",
+              onChanged: (v) => setState(() => votes[party] = v),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Map<String, List<String>> _buildAllianceGroups() {
+    final Map<String, List<String>> groups = {};
+    final Set<String> assigned = {};
+    final orderedParties =
+        partyOrder.where((party) => votes.containsKey(party));
+
+    for (final alliance in widget.alliances) {
+      final members = orderedParties
+          .where((party) => alliance.parties.contains(party))
+          .toList();
+      if (members.isEmpty) continue;
+      groups[alliance.name] = members;
+      assigned.addAll(members);
+    }
+
+    final unaligned =
+        orderedParties.where((party) => !assigned.contains(party));
+    if (unaligned.isNotEmpty) {
+      groups[_unalignedAllianceLabel] = unaligned.toList();
+    }
+
+    return groups;
+  }
+
+  Widget _buildAllianceSection(String name, List<String> parties) {
+    final totalVote = parties.fold<double>(
+      0.0,
+      (sum, party) => sum + (votes[party] ?? 0.0),
+    );
+    final headerColor = name == _unalignedAllianceLabel
+        ? Colors.grey.shade700
+        : colorForAllianceFromVotes(
+            allianceName: name,
+            parties: parties,
+            votes: votes,
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 8, top: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: headerColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: headerColor.withOpacity(0.45)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                name,
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: headerColor,
+                ),
+              ),
+              Text(
+                "%${totalVote.toStringAsFixed(1)}",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: headerColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: parties.length,
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              _reorderWithinGroup(parties, oldIndex, newIndex);
+            });
+          },
+          itemBuilder: (context, index) {
+            final party = parties[index];
+            return _buildPartySlider(
+              party,
+              dragIndex: index,
+              showDragHandle: true,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  void _reorderPartyList(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) newIndex -= 1;
+    setState(() {
+      final party = partyOrder.removeAt(oldIndex);
+      partyOrder.insert(newIndex, party);
+    });
+  }
+
+  void _reorderWithinGroup(
+    List<String> parties,
+    int oldIndex,
+    int newIndex,
+  ) {
+    if (newIndex > oldIndex) newIndex -= 1;
+
+    final positions = <int>[];
+    for (int i = 0; i < partyOrder.length; i++) {
+      if (parties.contains(partyOrder[i])) {
+        positions.add(i);
+      }
+    }
+    if (oldIndex < 0 || oldIndex >= positions.length) return;
+
+    final moved = partyOrder.removeAt(positions[oldIndex]);
+
+    final newPositions = <int>[];
+    for (int i = 0; i < partyOrder.length; i++) {
+      if (parties.contains(partyOrder[i])) {
+        newPositions.add(i);
+      }
+    }
+
+    final insertPos = newIndex >= newPositions.length
+        ? (newPositions.isEmpty ? partyOrder.length : newPositions.last + 1)
+        : newPositions[newIndex];
+    partyOrder.insert(insertPos, moved);
   }
 
   @override
@@ -411,64 +668,64 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                 const SizedBox(height: 16),
 
                 // Partiler
-                for (var p in votes.keys)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  p,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                              if (votes.length > 2)
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 20),
-                                  onPressed: () => _removeParty(p),
-                                  tooltip: "Partiyi Kaldır",
-                                ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blueGrey.shade700,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  "%${votes[p]!.toStringAsFixed(1)}",
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ),
-                            ],
+                if (widget.alliances.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: SegmentedButton<MapMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: MapMode.party,
+                            label: Text("Parti"),
+                            icon: Icon(Icons.flag),
                           ),
-                          Slider(
-                            value: votes[p]!,
-                            min: 0,
-                            max: 60,
-                            divisions: 600,
-                            label: "%${votes[p]!.toStringAsFixed(1)}",
-                            onChanged: (v) => setState(() => votes[p] = v),
+                          ButtonSegment(
+                            value: MapMode.alliance,
+                            label: Text("Ittifak"),
+                            icon: Icon(Icons.groups),
                           ),
                         ],
+                        selected: {sliderMode},
+                        onSelectionChanged: (set) {
+                          if (set.isEmpty) return;
+                          setState(() {
+                            sliderMode = set.first;
+                          });
+                        },
+                        style: ButtonStyle(
+                          backgroundColor:
+                              MaterialStateProperty.resolveWith((states) {
+                            if (states.contains(MaterialState.selected)) {
+                              return Colors.blueGrey.shade700;
+                            }
+                            return Colors.blueGrey.shade100;
+                          }),
+                          foregroundColor:
+                              MaterialStateProperty.all(Colors.white),
+                        ),
                       ),
                     ),
                   ),
+                if (sliderMode == MapMode.party)
+                  ReorderableListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    buildDefaultDragHandles: false,
+                    itemCount: partyOrder.length,
+                    onReorder: _reorderPartyList,
+                    itemBuilder: (context, index) {
+                      final party = partyOrder[index];
+                      return _buildPartySlider(
+                        party,
+                        dragIndex: index,
+                        showDragHandle: true,
+                      );
+                    },
+                  ),
+                if (sliderMode == MapMode.alliance)
+                  for (final entry in _buildAllianceGroups().entries)
+                    _buildAllianceSection(entry.key, entry.value),
 
                 // Parti Ekle Butonları
                 Row(
@@ -562,7 +819,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                 // Simülasyon Butonu
                 ElevatedButton(
                   onPressed: (total - 100).abs() < 0.5
-                      ? () => widget.onSimulate(votes, threshold)
+                      ? () => widget.onSimulate(votes, threshold, partyOrder)
                       : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueGrey.shade700,

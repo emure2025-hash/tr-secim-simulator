@@ -11,6 +11,37 @@ class AllianceRegionDetailDialog extends StatelessWidget {
     required this.result,
   });
 
+  Widget _buildPartyLogo(String party) {
+    final logoPath = logoForParty(party);
+    if (logoPath == null) {
+      return CircleAvatar(
+        radius: 6,
+        backgroundColor: colorForParty(party),
+        child: Text(
+          party.isNotEmpty ? party[0].toUpperCase() : "?",
+          style: const TextStyle(fontSize: 8, color: Colors.white),
+        ),
+      );
+    }
+
+    return ClipOval(
+      child: Image.asset(
+        logoPath,
+        width: 12,
+        height: 12,
+        fit: BoxFit.contain,
+      ),
+    );
+  }
+
+  Widget _buildAllianceLogos(Iterable<String> parties) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: parties.map(_buildPartyLogo).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final region = result.region;
@@ -167,12 +198,24 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
-                                    child: Text(
-                                      allianceName,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                      ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          allianceName,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        if (partySeats.isNotEmpty) ...[
+                                          const SizedBox(height: 6),
+                                          _buildAllianceLogos(
+                                            partySeats.keys,
+                                          ),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                   Container(
@@ -212,11 +255,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                             vertical: 4),
                                         child: Row(
                                           children: [
-                                            CircleAvatar(
-                                              backgroundColor:
-                                                  colorForParty(party.key),
-                                              radius: 6,
-                                            ),
+                                            _buildPartyLogo(party.key),
                                             const SizedBox(width: 8),
                                             Expanded(
                                               child: Text(
@@ -259,6 +298,10 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                     const SizedBox(height: 12),
 
                     ...result.allianceVotes.entries.map((entry) {
+                      final allianceName = entry.key;
+                      final allianceParties =
+                          result.partySeatsInAlliance[allianceName]?.keys ?? [];
+
                       return Card(
                         margin: const EdgeInsets.only(bottom: 8),
                         child: Padding(
@@ -269,7 +312,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                 width: 12,
                                 height: 40,
                                 decoration: BoxDecoration(
-                                  color: allianceColor(entry.key),
+                                  color: allianceColor(allianceName),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                               ),
@@ -279,17 +322,21 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      entry.key,
+                                      allianceName,
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
+                                    if (allianceParties.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      _buildAllianceLogos(allianceParties),
+                                    ],
                                     const SizedBox(height: 4),
                                     LinearProgressIndicator(
                                       value: entry.value / 100,
                                       backgroundColor: Colors.grey.shade200,
-                                      color: allianceColor(entry.key),
+                                      color: allianceColor(allianceName),
                                     ),
                                   ],
                                 ),

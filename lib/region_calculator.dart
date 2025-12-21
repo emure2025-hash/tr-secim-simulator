@@ -43,33 +43,30 @@ RegionResult calculateRegionResult({
     });
   }
 
-  // 3) Ittifaklari olustur
+  // 3) Ittifaklari olustur (sadece tanimli ittifaklar)
   final Map<String, List<String>> allianceMap = {};
-  final Set<String> partiesInAlliance = {};
 
   for (final alliance in alliances) {
     allianceMap[alliance.name] = alliance.parties;
-    partiesInAlliance.addAll(alliance.parties);
   }
 
-  // Ittifak disindaki partileri tek partilik ittifak olarak ekle
-  for (final party in regionalVotes.keys) {
-    if (!partiesInAlliance.contains(party)) {
-      allianceMap[party] = [party];
-    }
-  }
-
-  // 4) Ittifak oylarini hesapla
-  final Map<String, double> allianceVotes = {};
+  // 4) Ittifak oylarini hesapla (ulusal ve bolgesel)
+  final Map<String, double> allianceRegionalVotes = {};
+  final Map<String, double> allianceNationalVotes = {};
   allianceMap.forEach((allianceName, parties) {
-    double totalVote = 0;
+    double regionalTotal = 0;
+    double nationalTotal = 0;
     for (final party in parties) {
-      totalVote += regionalVotes[party] ?? 0;
+      regionalTotal += regionalVotes[party] ?? 0;
+      nationalTotal += nationalVotes[party] ?? 0;
     }
-    allianceVotes[allianceName] = totalVote;
+    allianceRegionalVotes[allianceName] = regionalTotal;
+    allianceNationalVotes[allianceName] = nationalTotal;
   });
 
-  // 5) Parti bazli baraj uygula: parti baraji gecer veya ittifak baraji gecer
+  // 5) Baraj kurali (ulusal baraj esas, bolgesel baraj ek kosul):
+  // - Ittifak disindaki partiler ulusal+bolgesel baraji gecmeli.
+  // - Ittifak icindeki partiler icin baraj ittifaka uygulanir.
   final Map<String, String> partyAlliance = {};
   allianceMap.forEach((allianceName, parties) {
     for (final party in parties) {
@@ -77,15 +74,15 @@ RegionResult calculateRegionResult({
     }
   });
 
-  bool alliancePasses(String party) {
-    final allianceName = partyAlliance[party];
-    if (allianceName == null) return false;
-    return (allianceVotes[allianceName] ?? 0) >= threshold;
-  }
-
   final eligibleParties = regionalVotes.entries.where((entry) {
-    final partyVote = entry.value;
-    return partyVote >= threshold || alliancePasses(entry.key);
+    final partyRegionalVote = entry.value;
+    final partyNationalVote = nationalVotes[entry.key] ?? 0;
+    final allianceName = partyAlliance[entry.key];
+    if (allianceName == null) {
+      return partyNationalVote >= threshold && partyRegionalVote >= threshold;
+    }
+    return (allianceNationalVotes[allianceName] ?? 0) >= threshold &&
+        (allianceRegionalVotes[allianceName] ?? 0) >= threshold;
   }).toList();
 
   // 6) D'Hondt ile sandalye dagilimi (parti bazinda)

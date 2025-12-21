@@ -1,39 +1,49 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Parlamento yarım dairesi gösterimi
+class PartyBlock {
+  final Color color;
+  final int seats;
+
+  PartyBlock(this.color, this.seats);
+}
+
+/// Parlamento yarim dairesi gosterimi
 class SeatDistributionWidget extends StatelessWidget {
   final Map<String, int> seatsByParty;
   final Map<String, Color> partyColors;
+  final List<int> markerThresholds;
 
   const SeatDistributionWidget({
     super.key,
     required this.seatsByParty,
     required this.partyColors,
+    this.markerThresholds = const [300, 360, 400],
   });
 
-  List<Color> _buildSeatColors() {
-    final List<Color> colors = [];
+  List<PartyBlock> _buildBlocks() {
     final sorted = seatsByParty.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
-    for (final entry in sorted) {
-      final color = partyColors[entry.key] ?? Colors.grey;
-      colors.addAll(List<Color>.filled(entry.value, color));
-    }
-    return colors;
+    return sorted.map((entry) {
+      return PartyBlock(
+        partyColors[entry.key] ?? Colors.grey,
+        entry.value,
+      );
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    final seatColors = _buildSeatColors();
+    final blocks = _buildBlocks();
+    final totalSeats = blocks.fold<int>(0, (sum, block) => sum + block.seats);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "Koltuk Dağılımı",
+          "Koltuk DaŽYŽñlŽñmŽñ",
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
@@ -48,9 +58,9 @@ class SeatDistributionWidget extends StatelessWidget {
               builder: (context, constraints) {
                 return CustomPaint(
                   painter: _ParliamentPainter(
-                    seatColors: seatColors,
-                    seatRadius: 4,
-                    gap: 3,
+                    blocks: blocks,
+                    totalSeats: totalSeats,
+                    markerThresholds: markerThresholds,
                   ),
                   size: Size(
                     constraints.maxWidth,
@@ -67,58 +77,108 @@ class SeatDistributionWidget extends StatelessWidget {
 }
 
 class _ParliamentPainter extends CustomPainter {
-  final List<Color> seatColors;
-  final double seatRadius;
-  final double gap;
+  final List<PartyBlock> blocks;
+  final int totalSeats;
+  final List<int> markerThresholds;
 
   _ParliamentPainter({
-    required this.seatColors,
-    required this.seatRadius,
-    required this.gap,
+    required this.blocks,
+    required this.totalSeats,
+    required this.markerThresholds,
   });
+
+  double _angleForThreshold(int seat) {
+    return math.pi * (seat / totalSeats);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (seatColors.isEmpty) return;
+    if (blocks.isEmpty || totalSeats == 0) return;
 
-    final paint = Paint()..style = PaintingStyle.fill;
-    final seatDiameter = seatRadius * 2;
     final center = Offset(size.width / 2, size.height);
-    double currentRadius = math.min(size.width / 2, size.height) - seatRadius;
+    const rows = 9;
+    final maxRadius =
+        math.min(size.width * 0.45, size.height * 0.95);
+    final seatRadius = math.min(size.width, size.height) / 120;
+    final rowSpacing = maxRadius / rows;
 
-    // Fit as many rings as the height allows
-    final maxRings =
-        (size.height / (seatDiameter + gap)).floor().clamp(1, 14);
+    final markerPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2
+      ..color = Colors.black54;
 
-    int colorIndex = 0;
-    for (int ring = 0;
-        ring < maxRings && colorIndex < seatColors.length;
-        ring++) {
-      if (currentRadius <= seatRadius) break;
+    for (final threshold in markerThresholds) {
+      if (threshold <= 0 || threshold > totalSeats) continue;
+      final markerAngle = math.pi - _angleForThreshold(threshold);
+      final innerRadius = maxRadius - (rows - 1) * rowSpacing;
+      final start = Offset(
+        center.dx + innerRadius * math.cos(markerAngle),
+        center.dy - innerRadius * math.sin(markerAngle),
+      );
+      final end = Offset(
+        center.dx + maxRadius * math.cos(markerAngle),
+        center.dy - maxRadius * math.sin(markerAngle),
+      );
+      canvas.drawLine(start, end, markerPaint);
+    }
 
-      final seatsInRing = math.max(
-        2,
-        (math.pi * currentRadius / (seatDiameter + gap)).floor(),
+    double startAngle = math.pi;
+
+    for (final block in blocks) {
+      final sweepAngle = math.pi * (block.seats / totalSeats);
+
+      _drawPartyBlock(
+        canvas: canvas,
+        center: center,
+        startAngle: startAngle,
+        sweepAngle: sweepAngle,
+        color: block.color,
+        size: size,
+        rows: rows,
+        maxRadius: maxRadius,
+        seatRadius: seatRadius,
+        rowSpacing: rowSpacing,
       );
 
-      for (int i = 0; i < seatsInRing && colorIndex < seatColors.length; i++) {
-        final angle = math.pi - (math.pi * i / (seatsInRing - 1));
-        final dx = center.dx + math.cos(angle) * currentRadius;
-        final dy = center.dy - math.sin(angle) * currentRadius;
+      startAngle -= sweepAngle;
+    }
+  }
 
-        paint.color = seatColors[colorIndex];
-        canvas.drawCircle(Offset(dx, dy), seatRadius, paint);
-        colorIndex++;
+  void _drawPartyBlock({
+    required Canvas canvas,
+    required Offset center,
+    required double startAngle,
+    required double sweepAngle,
+    required Color color,
+    required Size size,
+    required int rows,
+    required double maxRadius,
+    required double seatRadius,
+    required double rowSpacing,
+  }) {
+    final paint = Paint()..color = color;
+
+    for (int row = 0; row < rows; row++) {
+      final radius = maxRadius - row * rowSpacing;
+      final seatsInRow = (sweepAngle * radius / (seatRadius * 2)).floor();
+
+      if (seatsInRow <= 0) continue;
+
+      for (int i = 0; i < seatsInRow; i++) {
+        final angle = startAngle - (sweepAngle * i / seatsInRow);
+        final offset = Offset(
+          center.dx + radius * math.cos(angle),
+          center.dy - radius * math.sin(angle),
+        );
+        canvas.drawCircle(offset, seatRadius, paint);
       }
-
-      currentRadius -= seatDiameter + gap;
     }
   }
 
   @override
   bool shouldRepaint(covariant _ParliamentPainter oldDelegate) {
-    return oldDelegate.seatColors != seatColors ||
-        oldDelegate.seatRadius != seatRadius ||
-        oldDelegate.gap != gap;
+    return oldDelegate.blocks != blocks ||
+        oldDelegate.totalSeats != totalSeats ||
+        oldDelegate.markerThresholds != markerThresholds;
   }
 }
