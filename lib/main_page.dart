@@ -218,6 +218,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
   bool showPresetParties = false;
   MapMode sliderMode = MapMode.party;
   late List<String> partyOrder;
+  late List<String> _allianceOrderIds;
 
   static const String _unalignedAllianceLabel = "Ittifaksiz";
 
@@ -227,6 +228,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
   void initState() {
     super.initState();
     partyOrder = votes.keys.toList();
+    _allianceOrderIds = widget.alliances.map((alliance) => alliance.id).toList();
   }
 
   @override
@@ -237,6 +239,30 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
         sliderMode = MapMode.party;
       });
     }
+    _syncAllianceOrder();
+  }
+
+  void _syncAllianceOrder() {
+    final currentIds = widget.alliances.map((alliance) => alliance.id).toList();
+    final existing = _allianceOrderIds
+        .where((id) => currentIds.contains(id))
+        .toList();
+    final newOnes =
+        currentIds.where((id) => !existing.contains(id)).toList();
+    final next = [...existing, ...newOnes];
+    if (!_sameOrder(_allianceOrderIds, next)) {
+      setState(() {
+        _allianceOrderIds = next;
+      });
+    }
+  }
+
+  bool _sameOrder(List<String> left, List<String> right) {
+    if (left.length != right.length) return false;
+    for (int i = 0; i < left.length; i++) {
+      if (left[i] != right[i]) return false;
+    }
+    return true;
   }
 
   void _addPartyFromPreset(String partyName) {
@@ -456,13 +482,14 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
             border: Border.all(color: headerColor.withOpacity(0.45)),
           ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                name,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: headerColor,
+              Expanded(
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: headerColor,
+                  ),
                 ),
               ),
               Text(
@@ -496,6 +523,102 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
         ),
       ],
     );
+  }
+
+  Widget _buildAllianceSectionWithHandle(
+    String name,
+    List<String> parties, {
+    required int dragIndex,
+  }) {
+    final totalVote = parties.fold<double>(
+      0.0,
+      (sum, party) => sum + (votes[party] ?? 0.0),
+    );
+    final headerColor = name == _unalignedAllianceLabel
+        ? Colors.grey.shade700
+        : colorForAllianceFromVotes(
+            allianceName: name,
+            parties: parties,
+            votes: votes,
+          );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 8, top: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: headerColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: headerColor.withOpacity(0.45)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: headerColor,
+                  ),
+                ),
+              ),
+              Text(
+                "%${totalVote.toStringAsFixed(1)}",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: headerColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              ReorderableDragStartListener(
+                index: dragIndex,
+                child: Icon(
+                  Icons.drag_handle,
+                  color: headerColor.withOpacity(0.75),
+                ),
+              ),
+            ],
+          ),
+        ),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false,
+          itemCount: parties.length,
+          onReorder: (oldIndex, newIndex) {
+            setState(() {
+              _reorderWithinGroup(parties, oldIndex, newIndex);
+            });
+          },
+          itemBuilder: (context, index) {
+            final party = parties[index];
+            return _buildPartySlider(
+              party,
+              dragIndex: index,
+              showDragHandle: true,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  void _reorderAllianceSections(
+    List<String> orderedIds,
+    int oldIndex,
+    int newIndex,
+  ) {
+    if (newIndex > oldIndex) newIndex -= 1;
+    final moved = orderedIds.removeAt(oldIndex);
+    orderedIds.insert(newIndex, moved);
+    final orderedSet = orderedIds.toSet();
+    var i = 0;
+    _allianceOrderIds = [
+      for (final id in _allianceOrderIds)
+        if (orderedSet.contains(id)) orderedIds[i++] else id
+    ];
   }
 
   void _reorderPartyList(int oldIndex, int newIndex) {
@@ -538,6 +661,10 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final allianceGroups = _buildAllianceGroups();
+    final allianceById = {
+      for (final alliance in widget.alliances) alliance.id: alliance
+    };
     return SingleChildScrollView(
       child: Column(
         children: [
@@ -724,8 +851,55 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                     },
                   ),
                 if (sliderMode == MapMode.alliance)
-                  for (final entry in _buildAllianceGroups().entries)
-                    _buildAllianceSection(entry.key, entry.value),
+                  Builder(
+                    builder: (context) {
+                      final orderedAllianceIds = _allianceOrderIds
+                          .where((id) =>
+                              allianceById[id] != null &&
+                              allianceGroups
+                                  .containsKey(allianceById[id]!.name))
+                          .toList();
+                      return Column(
+                        children: [
+                          ReorderableListView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            buildDefaultDragHandles: false,
+                            itemCount: orderedAllianceIds.length,
+                            onReorder: (oldIndex, newIndex) {
+                              setState(() {
+                                _reorderAllianceSections(
+                                  List<String>.from(orderedAllianceIds),
+                                  oldIndex,
+                                  newIndex,
+                                );
+                              });
+                            },
+                            itemBuilder: (context, index) {
+                              final alliance =
+                                  allianceById[orderedAllianceIds[index]]!;
+                              final parties =
+                                  allianceGroups[alliance.name] ?? const [];
+                              return Container(
+                                key: ValueKey("alliance-${alliance.id}"),
+                                child: _buildAllianceSectionWithHandle(
+                                  alliance.name,
+                                  parties,
+                                  dragIndex: index,
+                                ),
+                              );
+                            },
+                          ),
+                          if (allianceGroups
+                              .containsKey(_unalignedAllianceLabel))
+                            _buildAllianceSection(
+                              _unalignedAllianceLabel,
+                              allianceGroups[_unalignedAllianceLabel]!,
+                            ),
+                        ],
+                      );
+                    },
+                  ),
 
                 // Parti Ekle Butonları
                 OutlinedButton.icon(
@@ -752,7 +926,14 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                         children: PresetParties.allParties
                             .where((p) => !votes.containsKey(p))
                             .map((party) => ActionChip(
-                                  label: Text(party),
+                                  label: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildPartyLogo(party),
+                                      const SizedBox(width: 4),
+                                      Text(party),
+                                    ],
+                                  ),
                                   onPressed: () => _addPartyFromPreset(party),
                                   avatar: const Icon(Icons.add, size: 16),
                                 ))

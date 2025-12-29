@@ -62,6 +62,8 @@ class AllianceRegionDetailDialog extends StatelessWidget {
     final region = result.region;
     final sortedAlliances = result.allianceSeats.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    final sortedAllianceVotes = result.allianceVotes.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
     Color allianceColor(String allianceName) {
       final leading = result.leadingPartyPerAlliance[allianceName];
       return leading != null
@@ -305,7 +307,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
 
-                    ...result.allianceVotes.entries.map((entry) {
+                    ...sortedAllianceVotes.map((entry) {
                       final allianceName = entry.key;
                       final allianceParties =
                           result.partySeatsInAlliance[allianceName]?.keys ?? [];

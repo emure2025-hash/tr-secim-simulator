@@ -22,6 +22,33 @@ class _AllianceManagerScreenState extends State<AllianceManagerScreen> {
   late List<Alliance> alliances;
   Set<String> usedParties = {};
 
+  Widget _buildPartyAvatar(String party, {double radius = 8}) {
+    final logoPath = logoForParty(party);
+    if (logoPath == null) {
+      return CircleAvatar(
+        backgroundColor: colorForParty(party),
+        radius: radius,
+        child: Text(
+          party.isNotEmpty ? party[0].toUpperCase() : "?",
+          style: TextStyle(fontSize: radius, color: Colors.white),
+        ),
+      );
+    }
+
+    return CircleAvatar(
+      backgroundColor: Colors.white,
+      radius: radius,
+      child: ClipOval(
+        child: Image.asset(
+          logoPath,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.contain,
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -111,16 +138,6 @@ class _AllianceManagerScreenState extends State<AllianceManagerScreen> {
         title: const Text("İttifak Yönetimi"),
         backgroundColor: Colors.blueGrey.shade700,
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.check),
-            onPressed: () {
-              widget.onSave(alliances);
-              Navigator.pop(context);
-            },
-            tooltip: "Kaydet",
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -149,10 +166,7 @@ class _AllianceManagerScreenState extends State<AllianceManagerScreen> {
                         return Chip(
                           label: Text(party),
                           backgroundColor: colorForParty(party).withOpacity(0.2),
-                          avatar: CircleAvatar(
-                            backgroundColor: colorForParty(party),
-                            radius: 8,
-                          ),
+                          avatar: _buildPartyAvatar(party),
                         );
                       }).toList(),
                     ),
@@ -224,10 +238,7 @@ class _AllianceManagerScreenState extends State<AllianceManagerScreen> {
                                 colorForParty(party).withOpacity(0.2),
                             deleteIcon: const Icon(Icons.close, size: 18),
                             onDeleted: () => _removePartyFromAlliance(index, party),
-                            avatar: CircleAvatar(
-                              backgroundColor: colorForParty(party),
-                              radius: 8,
-                            ),
+                            avatar: _buildPartyAvatar(party),
                           );
                         }).toList(),
                       ),
@@ -247,10 +258,8 @@ class _AllianceManagerScreenState extends State<AllianceManagerScreen> {
                                   shrinkWrap: true,
                                   children: availableParties.map((party) {
                                     return ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: colorForParty(party),
-                                        radius: 12,
-                                      ),
+                                      leading:
+                                          _buildPartyAvatar(party, radius: 12),
                                       title: Text(party),
                                       onTap: () {
                                         _addPartyToAlliance(index, party);
@@ -279,16 +288,39 @@ class _AllianceManagerScreenState extends State<AllianceManagerScreen> {
             );
           }).toList(),
 
-          // Yeni İttifak Oluştur
-          ElevatedButton.icon(
-            onPressed: _createAlliance,
-            icon: const Icon(Icons.add),
-            label: const Text("Yeni İttifak Oluştur"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueGrey.shade700,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
+          // Yeni ittifak + Kaydet
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _createAlliance,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text("Yeni İttifak"),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.blueGrey.shade700,
+                  side: BorderSide(color: Colors.blueGrey.shade200),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
+                  textStyle:
+                      const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  widget.onSave(alliances);
+                  Navigator.pop(context);
+                },
+                icon: const Icon(Icons.check),
+                label: const Text("Kaydet"),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueGrey.shade700,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 32),
+                ),
+              ),
+            ],
           ),
         ],
       ),

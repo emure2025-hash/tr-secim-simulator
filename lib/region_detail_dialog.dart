@@ -39,7 +39,17 @@ class RegionDetailDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final region = result.region;
     final sortedSeats = result.seats.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+      ..sort((a, b) {
+        final voteA = result.votes[a.key] ?? 0;
+        final voteB = result.votes[b.key] ?? 0;
+        final voteCompare = voteB.compareTo(voteA);
+        if (voteCompare != 0) return voteCompare;
+        if (a.value == b.value) {
+          if (a.key == result.winner && b.key != result.winner) return -1;
+          if (b.key == result.winner && a.key != result.winner) return 1;
+        }
+        return b.value.compareTo(a.value);
+      });
     
     final sortedVotes = result.votes.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));

@@ -20,7 +20,7 @@ class SeatDistributionWidget extends StatelessWidget {
     super.key,
     required this.seatsByParty,
     required this.partyColors,
-    this.markerThresholds = const [300, 360, 400],
+    this.markerThresholds = const [],
   });
 
   String _initials(String name) {
