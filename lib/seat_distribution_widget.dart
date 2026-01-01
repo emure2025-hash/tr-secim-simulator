@@ -4,14 +4,15 @@ import 'package:flutter/material.dart';
 import 'color_engine.dart';
 
 class PartyBlock {
+  final String label;
   final Color color;
   final int seats;
 
-  PartyBlock(this.color, this.seats);
+  PartyBlock(this.label, this.color, this.seats);
 }
 
 /// Parlamento yarim dairesi gosterimi
-class SeatDistributionWidget extends StatelessWidget {
+class SeatDistributionWidget extends StatefulWidget {
   final Map<String, int> seatsByParty;
   final Map<String, Color> partyColors;
   final List<int> markerThresholds;
@@ -23,57 +24,147 @@ class SeatDistributionWidget extends StatelessWidget {
     this.markerThresholds = const [],
   });
 
+  @override
+  State<SeatDistributionWidget> createState() => _SeatDistributionWidgetState();
+}
+
+class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
+  String? _hoveredParty;
+  String? _pendingHoverParty;
+  bool _hoverUpdateScheduled = false;
+
   String _initials(String name) {
     final trimmed = name.trim();
     if (trimmed.length <= 2) return trimmed.toUpperCase();
     return trimmed.substring(0, 2).toUpperCase();
   }
 
-  Widget _buildPartyLogo(String party, Color fallbackColor) {
+  Widget _buildPartyLogo(
+    String party,
+    Color fallbackColor, {
+    bool highlighted = false,
+  }) {
     final logoPath = logoForParty(party);
-    if (logoPath == null) {
-      return CircleAvatar(
-        radius: 9,
-        backgroundColor: fallbackColor,
-        child: Text(
-          _initials(party),
-          style: const TextStyle(fontSize: 9, color: Colors.white),
-        ),
-      );
-    }
+    final radius = highlighted ? 11.0 : 9.0;
+    final avatar = logoPath == null
+        ? CircleAvatar(
+            radius: radius,
+            backgroundColor: fallbackColor,
+            child: Text(
+              _initials(party),
+              style: const TextStyle(fontSize: 9, color: Colors.white),
+            ),
+          )
+        : CircleAvatar(
+            radius: radius,
+            backgroundColor: Colors.white,
+            child: ClipOval(
+              child: Image.asset(
+                logoPath,
+                width: 18,
+                height: 18,
+                fit: BoxFit.contain,
+              ),
+            ),
+          );
 
-    return CircleAvatar(
-      radius: 9,
-      backgroundColor: Colors.white,
-      child: ClipOval(
-        child: Image.asset(
-          logoPath,
-          width: 18,
-          height: 18,
-          fit: BoxFit.contain,
-        ),
+    if (!highlighted) return avatar;
+    return Container(
+      padding: const EdgeInsets.all(1),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: fallbackColor, width: 1.4),
       ),
+      child: avatar,
     );
   }
 
   List<PartyBlock> _buildBlocks() {
-    final sorted = seatsByParty.entries.toList()
+    final sorted = widget.seatsByParty.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return sorted.map((entry) {
       return PartyBlock(
-        partyColors[entry.key] ?? Colors.grey,
+        entry.key,
+        widget.partyColors[entry.key] ?? Colors.grey,
         entry.value,
       );
     }).toList();
   }
 
   List<MapEntry<String, int>> _buildLegendEntries() {
-    final entries = seatsByParty.entries
+    final entries = widget.seatsByParty.entries
         .where((entry) => entry.value > 0)
         .toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     return entries;
+  }
+
+  String? _hitTestParty(
+    Offset position,
+    Size size,
+    List<PartyBlock> blocks,
+    int totalSeats,
+  ) {
+    if (blocks.isEmpty || totalSeats == 0) return null;
+
+    final center = Offset(size.width / 2, size.height);
+    const rows = 9;
+    final maxRadius = math.min(size.width * 0.42, size.height * 0.84);
+    final seatRadius = math.min(size.width, size.height) / 120;
+    final rowSpacing = maxRadius / rows;
+    const baseGapAngle = math.pi / 90;
+    final hoverRadius = seatRadius + 2;
+    final hoverRadiusSq = hoverRadius * hoverRadius;
+
+    double startAngle = math.pi;
+
+    for (final block in blocks) {
+      final rawSweep = math.pi * (block.seats / totalSeats);
+      final gapAngle = math.min(baseGapAngle, rawSweep * 0.25);
+      final sweepAngle = rawSweep - gapAngle;
+      if (sweepAngle <= 0) {
+        startAngle -= rawSweep;
+        continue;
+      }
+
+      for (int row = 0; row < rows; row++) {
+        final radius = maxRadius - row * rowSpacing;
+        final seatsInRow = (sweepAngle * radius / (seatRadius * 2)).floor();
+        if (seatsInRow <= 0) continue;
+
+        for (int i = 0; i < seatsInRow; i++) {
+          final angle = startAngle - (sweepAngle * i / seatsInRow);
+          final offset = Offset(
+            center.dx + radius * math.cos(angle),
+            center.dy - radius * math.sin(angle),
+          );
+          final dx = position.dx - offset.dx;
+          final dy = position.dy - offset.dy;
+          if (dx * dx + dy * dy <= hoverRadiusSq) {
+            return block.label;
+          }
+        }
+      }
+
+      startAngle -= rawSweep;
+    }
+
+    return null;
+  }
+
+  void _scheduleHoverUpdate(String? party) {
+    _pendingHoverParty = party;
+    if (_hoverUpdateScheduled) return;
+    _hoverUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _hoverUpdateScheduled = false;
+      if (!mounted) return;
+      if (_hoveredParty == _pendingHoverParty) return;
+      setState(() {
+        _hoveredParty = _pendingHoverParty;
+      });
+    });
   }
 
   @override
@@ -99,15 +190,34 @@ class SeatDistributionWidget extends StatelessWidget {
             padding: const EdgeInsets.all(12),
             child: LayoutBuilder(
               builder: (context, constraints) {
-                return CustomPaint(
-                  painter: _ParliamentPainter(
-                    blocks: blocks,
-                    totalSeats: totalSeats,
-                    markerThresholds: markerThresholds,
-                  ),
-                  size: Size(
-                    constraints.maxWidth,
-                    constraints.maxHeight,
+                final paintSize = Size(
+                  constraints.maxWidth,
+                  constraints.maxHeight,
+                );
+                return MouseRegion(
+                  onHover: (event) {
+                    final hovered = _hitTestParty(
+                      event.localPosition,
+                      paintSize,
+                      blocks,
+                      totalSeats,
+                    );
+                    if (hovered != _hoveredParty) {
+                      _scheduleHoverUpdate(hovered);
+                    }
+                  },
+                  onExit: (_) {
+                    if (_hoveredParty != null) {
+                      _scheduleHoverUpdate(null);
+                    }
+                  },
+                  child: CustomPaint(
+                    painter: _ParliamentPainter(
+                      blocks: blocks,
+                      totalSeats: totalSeats,
+                      markerThresholds: widget.markerThresholds,
+                    ),
+                    size: paintSize,
                   ),
                 );
               },
@@ -120,20 +230,29 @@ class SeatDistributionWidget extends StatelessWidget {
             spacing: 8,
             runSpacing: 6,
             children: legendEntries.map((entry) {
-              final color = partyColors[entry.key] ?? Colors.grey;
-              return Container(
+              final color = widget.partyColors[entry.key] ?? Colors.grey;
+              final isHighlighted = entry.key == _hoveredParty;
+              return AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 8,
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color:
+                      isHighlighted ? color.withOpacity(0.12) : Colors.white,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: color.withOpacity(0.25)),
+                  border: Border.all(
+                    color: isHighlighted
+                        ? color.withOpacity(0.85)
+                        : color.withOpacity(0.25),
+                    width: isHighlighted ? 1.5 : 1,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 6,
+                      color:
+                          Colors.black.withOpacity(isHighlighted ? 0.08 : 0.04),
+                      blurRadius: isHighlighted ? 8 : 6,
                       offset: const Offset(0, 2),
                     ),
                   ],
@@ -141,13 +260,18 @@ class SeatDistributionWidget extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildPartyLogo(entry.key, color),
+                    _buildPartyLogo(
+                      entry.key,
+                      color,
+                      highlighted: isHighlighted,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       entry.key,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 12,
+                        color: isHighlighted ? color : Colors.black87,
                       ),
                     ),
                     const SizedBox(width: 6),

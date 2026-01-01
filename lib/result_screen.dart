@@ -23,6 +23,18 @@ class _VoteSummary {
     required this.color,
     this.parties = const [],
   });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _VoteSummary &&
+          label == other.label &&
+          votePercent == other.votePercent &&
+          seats == other.seats &&
+          color == other.color;
+
+  @override
+  int get hashCode => Object.hash(label, votePercent, seats, color);
 }
 
 class _PieLegendEntry {
@@ -81,6 +93,15 @@ class _ResultScreenState extends State<ResultScreen> {
   late double _mapScale;
   late Offset _mapOffset;
   MapMode _sliderMode = MapMode.party;
+  String? _hoveredPieLabel;
+  int? _hoveredPieIndex;
+  
+  // Cache için
+  List<_VoteSummary>? _cachedPartySummaries;
+  List<_VoteSummary>? _cachedAllianceSummaries;
+  Map<String, int>? _cachedSeatMap;
+  Map<String, Color>? _cachedColorMap;
+  List<PieChartSectionData>? _cachedPieSections;
 
   @override
   void initState() {
@@ -92,6 +113,20 @@ class _ResultScreenState extends State<ResultScreen> {
   @override
   void didUpdateWidget(covariant ResultScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    
+    // Cache invalidation
+    if (oldWidget.result != widget.result ||
+        oldWidget.votes != widget.votes ||
+        oldWidget.alliances != widget.alliances) {
+      _cachedPartySummaries = null;
+      _cachedAllianceSummaries = null;
+      _cachedSeatMap = null;
+      _cachedColorMap = null;
+      _cachedPieSections = null;
+      _hoveredPieLabel = null;
+      _hoveredPieIndex = null;
+    }
+    
     if (widget.alliances.isEmpty && _sliderMode == MapMode.alliance) {
       setState(() {
         _sliderMode = MapMode.party;
@@ -105,6 +140,18 @@ class _ResultScreenState extends State<ResultScreen> {
       _mapOffset = offset;
     });
     widget.onMapUpdate?.call(scale, offset);
+  }
+
+  void _setHoveredPieLabel(String? label, int? index) {
+    // Index ile kontrol et - daha hızlı
+    if (_hoveredPieIndex == index) return;
+    
+    if (mounted) {
+      setState(() {
+        _hoveredPieLabel = label;
+        _hoveredPieIndex = index;
+      });
+    }
   }
 
   String _initials(String name) {
@@ -138,7 +185,11 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 
-  Widget _buildAllianceLogos(List<String> parties, Color fallbackColor) {
+  Widget _buildAllianceLogos(
+    List<String> parties,
+    Color fallbackColor, {
+    bool highlighted = false,
+  }) {
     final members = parties.isNotEmpty ? parties : const <String>[];
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -149,26 +200,38 @@ class _ResultScreenState extends State<ResultScreen> {
             return Padding(
               padding: const EdgeInsets.only(right: 4),
               child: CircleAvatar(
-                radius: 10,
+                radius: highlighted ? 12 : 10,
                 backgroundColor: fallbackColor,
                 child: Text(
                   _initials(party),
-                  style: const TextStyle(fontSize: 10, color: Colors.white),
+                  style: TextStyle(
+                    fontSize: highlighted ? 11 : 10,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             );
           }
           return Padding(
             padding: const EdgeInsets.only(right: 4),
-            child: CircleAvatar(
-              radius: 10,
-              backgroundColor: Colors.white,
-              child: ClipOval(
-                child: Image.asset(
-                  logoPath,
-                  width: 20,
-                  height: 20,
-                  fit: BoxFit.contain,
+            child: Container(
+              padding: highlighted ? const EdgeInsets.all(1) : EdgeInsets.zero,
+              decoration: highlighted
+                  ? BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: fallbackColor, width: 1.4),
+                    )
+                  : null,
+              child: CircleAvatar(
+                radius: highlighted ? 12 : 10,
+                backgroundColor: Colors.white,
+                child: ClipOval(
+                  child: Image.asset(
+                    logoPath,
+                    width: highlighted ? 22 : 20,
+                    height: highlighted ? 22 : 20,
+                    fit: BoxFit.contain,
+                  ),
                 ),
               ),
             ),
@@ -178,34 +241,53 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 
-  Widget _buildLegendLogo(String label, Color fallbackColor) {
+  Widget _buildLegendLogo(
+    String label,
+    Color fallbackColor, {
+    bool highlighted = false,
+  }) {
     final logoPath = logoForParty(label);
     if (logoPath == null) {
       return CircleAvatar(
-        radius: 8,
+        radius: highlighted ? 10 : 8,
         backgroundColor: fallbackColor,
         child: Text(
           _initials(label),
-          style: const TextStyle(fontSize: 9, color: Colors.white),
+          style: TextStyle(
+            fontSize: highlighted ? 10 : 9,
+            color: Colors.white,
+          ),
         ),
       );
     }
 
-    return CircleAvatar(
-      radius: 8,
+    final avatar = CircleAvatar(
+      radius: highlighted ? 10 : 8,
       backgroundColor: Colors.white,
       child: ClipOval(
         child: Image.asset(
           logoPath,
-          width: 16,
-          height: 16,
+          width: highlighted ? 18 : 16,
+          height: highlighted ? 18 : 16,
           fit: BoxFit.contain,
         ),
       ),
     );
+    if (!highlighted) return avatar;
+    return Container(
+      padding: const EdgeInsets.all(1),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: fallbackColor, width: 1.3),
+      ),
+      child: avatar,
+    );
   }
 
-  Widget _buildPieLegend(List<_PieLegendEntry> entries) {
+  Widget _buildPieLegend(
+    List<_PieLegendEntry> entries, {
+    String? highlightedLabel,
+  }) {
     if (entries.isEmpty) {
       return const Center(
         child: Text(
@@ -221,35 +303,61 @@ class _ResultScreenState extends State<ResultScreen> {
       itemBuilder: (context, index) {
         final entry = entries[index];
         final hasAllianceLogos = entry.parties.length > 1;
-        return Row(
-          children: [
-            if (hasAllianceLogos)
-              SizedBox(
-                width: 44,
-                child: _buildAllianceLogos(entry.parties, entry.color),
-              )
-            else
-              _buildLegendLogo(entry.label, entry.color),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                entry.label,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+        final isHighlighted = entry.label == highlightedLabel;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          decoration: BoxDecoration(
+            color: isHighlighted
+                ? entry.color.withOpacity(0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isHighlighted
+                  ? entry.color.withOpacity(0.85)
+                  : Colors.transparent,
+              width: isHighlighted ? 1.4 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (hasAllianceLogos)
+                SizedBox(
+                  width: 44,
+                  child: _buildAllianceLogos(
+                    entry.parties,
+                    entry.color,
+                    highlighted: isHighlighted,
+                  ),
+                )
+              else
+                _buildLegendLogo(
+                  entry.label,
+                  entry.color,
+                  highlighted: isHighlighted,
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  entry.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isHighlighted ? entry.color : Colors.black87,
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              "${entry.percent.toStringAsFixed(1)}%",
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+              const SizedBox(width: 6),
+              Text(
+                "${entry.percent.toStringAsFixed(1)}%",
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -275,6 +383,8 @@ class _ResultScreenState extends State<ResultScreen> {
   }
 
   List<_VoteSummary> _buildPartySummaries() {
+    if (_cachedPartySummaries != null) return _cachedPartySummaries!;
+    
     final orderedParties = _orderedParties();
     final summaries = orderedParties
         .map(
@@ -288,10 +398,14 @@ class _ResultScreenState extends State<ResultScreen> {
         )
         .toList();
     summaries.sort((a, b) => b.votePercent.compareTo(a.votePercent));
+    
+    _cachedPartySummaries = summaries;
     return summaries;
   }
 
   List<_VoteSummary> _buildAllianceSummaries() {
+    if (_cachedAllianceSummaries != null) return _cachedAllianceSummaries!;
+    
     final orderedParties = _orderedParties();
     final Map<String, List<String>> allianceGroups = {};
     final Set<String> assigned = {};
@@ -343,6 +457,8 @@ class _ResultScreenState extends State<ResultScreen> {
     }
 
     summaries.sort((a, b) => b.votePercent.compareTo(a.votePercent));
+    
+    _cachedAllianceSummaries = summaries;
     return summaries;
   }
 
@@ -354,17 +470,16 @@ class _ResultScreenState extends State<ResultScreen> {
     return {for (final summary in summaries) summary.label: summary.color};
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final totalSeats = widget.result.values.fold<int>(0, (a, b) => a + b);
-    final sliderSummaries = _sliderMode == MapMode.alliance
-        ? _buildAllianceSummaries()
-        : _buildPartySummaries();
-    final seatMap = _buildSeatMapFromSummaries(sliderSummaries);
-    final seatColorMap = _buildColorMapFromSummaries(sliderSummaries);
-    final pieSections = sliderSummaries.map((summary) {
-      final seatShare =
-          totalSeats == 0 ? 0 : (summary.seats / totalSeats * 100);
+  List<PieChartSectionData> _buildPieSections(
+    List<_VoteSummary> summaries,
+    int totalSeats,
+  ) {
+    return summaries.asMap().entries.map((entry) {
+      final index = entry.key;
+      final summary = entry.value;
+      final seatShare = totalSeats == 0 ? 0 : (summary.seats / totalSeats * 100);
+      final isHovered = index == _hoveredPieIndex;
+      
       return PieChartSectionData(
         color: summary.color,
         value: summary.seats.toDouble(),
@@ -374,9 +489,23 @@ class _ResultScreenState extends State<ResultScreen> {
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
-        radius: 55,
+        radius: isHovered ? 60 : 55, // Hover'da büyüt
+        titlePositionPercentageOffset: isHovered ? 0.65 : 0.6,
       );
     }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalSeats = widget.result.values.fold<int>(0, (a, b) => a + b);
+    final sliderSummaries = _sliderMode == MapMode.alliance
+        ? _buildAllianceSummaries()
+        : _buildPartySummaries();
+    final seatMap = _buildSeatMapFromSummaries(sliderSummaries);
+    final seatColorMap = _buildColorMapFromSummaries(sliderSummaries);
+    
+    // Pie sections'ı sadece hover değiştiğinde yeniden hesapla
+    final pieSections = _buildPieSections(sliderSummaries, totalSeats);
 
     final bool canShowAlliance = widget.alliances.isNotEmpty &&
         (widget.regionAllianceResults?.isNotEmpty ?? false);
@@ -441,23 +570,26 @@ class _ResultScreenState extends State<ResultScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            SizedBox(
-              height: 360,
-              child: widget.features.isEmpty
-                  ? const Center(child: CircularProgressIndicator())
-                  : InteractiveMapWidget(
-                      features: widget.features,
-                      regionResults:
-                          widget.mapMode == MapMode.party ? widget.regionResults : null,
-                      regionAllianceResults: widget.mapMode == MapMode.alliance
-                          ? widget.regionAllianceResults
-                          : null,
-                      useAllianceColors: widget.mapMode == MapMode.alliance,
-                      onRegionTap: widget.onRegionTap,
-                      scale: _mapScale,
-                      offset: _mapOffset,
-                      onTransform: _handleMapUpdate,
-                    ),
+            RepaintBoundary(
+              child: SizedBox(
+                height: 360,
+                child: widget.features.isEmpty
+                    ? const Center(child: CircularProgressIndicator())
+                    : InteractiveMapWidget(
+                        features: widget.features,
+                        regionResults: widget.mapMode == MapMode.party
+                            ? widget.regionResults
+                            : null,
+                        regionAllianceResults: widget.mapMode == MapMode.alliance
+                            ? widget.regionAllianceResults
+                            : null,
+                        useAllianceColors: widget.mapMode == MapMode.alliance,
+                        onRegionTap: widget.onRegionTap,
+                        scale: _mapScale,
+                        offset: _mapOffset,
+                        onTransform: _handleMapUpdate,
+                      ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -508,67 +640,98 @@ class _ResultScreenState extends State<ResultScreen> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: Card(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      "Koltuk Dagilimi (Pie)",
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
+                            child: RepaintBoundary(
+                              child: Card(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "Koltuk Dagilimi (Pie)",
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Expanded(
-                                      child: LayoutBuilder(
-                                        builder: (context, constraints) {
-                                          final chart = PieChart(
-                                            PieChartData(
-                                              sections: pieSections,
-                                              sectionsSpace: 2,
-                                              centerSpaceRadius: 36,
-                                              borderData:
-                                                  FlBorderData(show: false),
-                                            ),
-                                          );
+                                      const SizedBox(height: 8),
+                                      Expanded(
+                                        child: LayoutBuilder(
+                                          builder: (context, constraints) {
+                                            final chart = PieChart(
+                                              PieChartData(
+                                                sections: pieSections,
+                                                sectionsSpace: 2,
+                                                centerSpaceRadius: 36,
+                                                borderData:
+                                                    FlBorderData(show: false),
+                                                pieTouchData: PieTouchData(
+                                                  enabled: true,
+                                                  touchCallback:
+                                                      (event, response) {
+                                                    if (!event
+                                                        .isInterestedForInteractions) {
+                                                      _setHoveredPieLabel(null, null);
+                                                      return;
+                                                    }
+                                                    
+                                                    final touchedIndex = response
+                                                        ?.touchedSection
+                                                        ?.touchedSectionIndex;
+                                                    
+                                                    if (touchedIndex == null) {
+                                                      _setHoveredPieLabel(null, null);
+                                                      return;
+                                                    }
+                                                    
+                                                    final label = sliderSummaries[touchedIndex].label;
+                                                    _setHoveredPieLabel(label, touchedIndex);
+                                                  },
+                                                ),
+                                              ),
+                                              swapAnimationDuration: const Duration(milliseconds: 150),
+                                              swapAnimationCurve: Curves.easeOut,
+                                            );
 
-                                          if (constraints.maxWidth < 260) {
-                                            return Column(
+                                            if (constraints.maxWidth < 260) {
+                                              return Column(
+                                                children: [
+                                                  SizedBox(
+                                                    height: 120,
+                                                    child: _buildPieLegend(
+                                                      pieLegendEntries,
+                                                      highlightedLabel:
+                                                          _hoveredPieLabel,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Expanded(child: chart),
+                                                ],
+                                              );
+                                            }
+
+                                            return Row(
                                               children: [
                                                 SizedBox(
-                                                  height: 120,
+                                                  width: 140,
                                                   child: _buildPieLegend(
                                                     pieLegendEntries,
+                                                    highlightedLabel:
+                                                        _hoveredPieLabel,
                                                   ),
                                                 ),
-                                                const SizedBox(height: 8),
+                                                const SizedBox(width: 8),
                                                 Expanded(child: chart),
                                               ],
                                             );
-                                          }
-
-                                          return Row(
-                                            children: [
-                                              SizedBox(
-                                                width: 140,
-                                                child: _buildPieLegend(
-                                                  pieLegendEntries,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(child: chart),
-                                            ],
-                                          );
-                                        },
+                                          },
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -582,6 +745,7 @@ class _ResultScreenState extends State<ResultScreen> {
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
                                 child: SeatDistributionWidget(
+                                  key: ValueKey('$_sliderMode-${seatMap.length}'),
                                   seatsByParty: seatMap,
                                   partyColors: seatColorMap,
                                 ),
@@ -649,6 +813,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   const SizedBox(height: 12),
                   ...sliderSummaries.map((summary) {
                     return Card(
+                      key: ValueKey('${summary.label}-${summary.seats}'),
                       margin: const EdgeInsets.only(bottom: 8),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(
