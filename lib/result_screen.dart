@@ -93,8 +93,7 @@ class _ResultScreenState extends State<ResultScreen> {
   late double _mapScale;
   late Offset _mapOffset;
   MapMode _sliderMode = MapMode.party;
-  String? _hoveredPieLabel;
-  int? _hoveredPieIndex;
+  String? _selectedPieLabel;
   
   // Cache için
   List<_VoteSummary>? _cachedPartySummaries;
@@ -123,8 +122,7 @@ class _ResultScreenState extends State<ResultScreen> {
       _cachedSeatMap = null;
       _cachedColorMap = null;
       _cachedPieSections = null;
-      _hoveredPieLabel = null;
-      _hoveredPieIndex = null;
+      _selectedPieLabel = null;
     }
     
     if (widget.alliances.isEmpty && _sliderMode == MapMode.alliance) {
@@ -142,17 +140,6 @@ class _ResultScreenState extends State<ResultScreen> {
     widget.onMapUpdate?.call(scale, offset);
   }
 
-  void _setHoveredPieLabel(String? label, int? index) {
-    // Index ile kontrol et - daha hızlı
-    if (_hoveredPieIndex == index) return;
-    
-    if (mounted) {
-      setState(() {
-        _hoveredPieLabel = label;
-        _hoveredPieIndex = index;
-      });
-    }
-  }
 
   String _initials(String name) {
     final trimmed = name.trim();
@@ -304,59 +291,66 @@ class _ResultScreenState extends State<ResultScreen> {
         final entry = entries[index];
         final hasAllianceLogos = entry.parties.length > 1;
         final isHighlighted = entry.label == highlightedLabel;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          decoration: BoxDecoration(
-            color: isHighlighted
-                ? entry.color.withOpacity(0.12)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedPieLabel = isHighlighted ? null : entry.label;
+            });
+          },
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(
               color: isHighlighted
-                  ? entry.color.withOpacity(0.85)
+                  ? entry.color.withOpacity(0.12)
                   : Colors.transparent,
-              width: isHighlighted ? 1.4 : 1,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isHighlighted
+                    ? entry.color.withOpacity(0.85)
+                    : Colors.transparent,
+                width: isHighlighted ? 1.4 : 1,
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              if (hasAllianceLogos)
-                SizedBox(
-                  width: 44,
-                  child: _buildAllianceLogos(
-                    entry.parties,
+            child: Row(
+              children: [
+                if (hasAllianceLogos)
+                  SizedBox(
+                    width: 44,
+                    child: _buildAllianceLogos(
+                      entry.parties,
+                      entry.color,
+                      highlighted: isHighlighted,
+                    ),
+                  )
+                else
+                  _buildLegendLogo(
+                    entry.label,
                     entry.color,
                     highlighted: isHighlighted,
                   ),
-                )
-              else
-                _buildLegendLogo(
-                  entry.label,
-                  entry.color,
-                  highlighted: isHighlighted,
-                ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  entry.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: isHighlighted ? entry.color : Colors.black87,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    entry.label,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: isHighlighted ? entry.color : Colors.black87,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                "${entry.percent.toStringAsFixed(1)}%",
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
+                const SizedBox(width: 6),
+                Text(
+                  "${entry.percent.toStringAsFixed(1)}%",
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -473,12 +467,12 @@ class _ResultScreenState extends State<ResultScreen> {
   List<PieChartSectionData> _buildPieSections(
     List<_VoteSummary> summaries,
     int totalSeats,
+    String? highlightedLabel,
   ) {
     return summaries.asMap().entries.map((entry) {
-      final index = entry.key;
       final summary = entry.value;
       final seatShare = totalSeats == 0 ? 0 : (summary.seats / totalSeats * 100);
-      final isHovered = index == _hoveredPieIndex;
+      final isHovered = summary.label == highlightedLabel;
       
       return PieChartSectionData(
         color: summary.color,
@@ -501,11 +495,13 @@ class _ResultScreenState extends State<ResultScreen> {
     final sliderSummaries = _sliderMode == MapMode.alliance
         ? _buildAllianceSummaries()
         : _buildPartySummaries();
+    final activePieLabel = _selectedPieLabel;
     final seatMap = _buildSeatMapFromSummaries(sliderSummaries);
     final seatColorMap = _buildColorMapFromSummaries(sliderSummaries);
     
     // Pie sections'ı sadece hover değiştiğinde yeniden hesapla
-    final pieSections = _buildPieSections(sliderSummaries, totalSeats);
+    final pieSections =
+        _buildPieSections(sliderSummaries, totalSeats, activePieLabel);
 
     final bool canShowAlliance = widget.alliances.isNotEmpty &&
         (widget.regionAllianceResults?.isNotEmpty ?? false);
@@ -669,27 +665,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                                 borderData:
                                                     FlBorderData(show: false),
                                                 pieTouchData: PieTouchData(
-                                                  enabled: true,
-                                                  touchCallback:
-                                                      (event, response) {
-                                                    if (!event
-                                                        .isInterestedForInteractions) {
-                                                      _setHoveredPieLabel(null, null);
-                                                      return;
-                                                    }
-                                                    
-                                                    final touchedIndex = response
-                                                        ?.touchedSection
-                                                        ?.touchedSectionIndex;
-                                                    
-                                                    if (touchedIndex == null) {
-                                                      _setHoveredPieLabel(null, null);
-                                                      return;
-                                                    }
-                                                    
-                                                    final label = sliderSummaries[touchedIndex].label;
-                                                    _setHoveredPieLabel(label, touchedIndex);
-                                                  },
+                                                  enabled: false,
                                                 ),
                                               ),
                                               swapAnimationDuration: const Duration(milliseconds: 150),
@@ -703,8 +679,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                                     height: 120,
                                                     child: _buildPieLegend(
                                                       pieLegendEntries,
-                                                      highlightedLabel:
-                                                          _hoveredPieLabel,
+                                                      highlightedLabel: activePieLabel,
                                                     ),
                                                   ),
                                                   const SizedBox(height: 8),
@@ -719,8 +694,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                                   width: 140,
                                                   child: _buildPieLegend(
                                                     pieLegendEntries,
-                                                    highlightedLabel:
-                                                        _hoveredPieLabel,
+                                                    highlightedLabel: activePieLabel,
                                                   ),
                                                 ),
                                                 const SizedBox(width: 8),
@@ -884,3 +858,7 @@ class _ResultScreenState extends State<ResultScreen> {
     );
   }
 }
+
+
+
+

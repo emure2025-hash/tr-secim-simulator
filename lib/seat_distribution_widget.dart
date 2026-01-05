@@ -29,9 +29,7 @@ class SeatDistributionWidget extends StatefulWidget {
 }
 
 class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
-  String? _hoveredParty;
-  String? _pendingHoverParty;
-  bool _hoverUpdateScheduled = false;
+  String? _selectedParty;
 
   String _initials(String name) {
     final trimmed = name.trim();
@@ -100,78 +98,12 @@ class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
     return entries;
   }
 
-  String? _hitTestParty(
-    Offset position,
-    Size size,
-    List<PartyBlock> blocks,
-    int totalSeats,
-  ) {
-    if (blocks.isEmpty || totalSeats == 0) return null;
-
-    final center = Offset(size.width / 2, size.height);
-    const rows = 9;
-    final maxRadius = math.min(size.width * 0.42, size.height * 0.84);
-    final seatRadius = math.min(size.width, size.height) / 120;
-    final rowSpacing = maxRadius / rows;
-    const baseGapAngle = math.pi / 90;
-    final hoverRadius = seatRadius + 2;
-    final hoverRadiusSq = hoverRadius * hoverRadius;
-
-    double startAngle = math.pi;
-
-    for (final block in blocks) {
-      final rawSweep = math.pi * (block.seats / totalSeats);
-      final gapAngle = math.min(baseGapAngle, rawSweep * 0.25);
-      final sweepAngle = rawSweep - gapAngle;
-      if (sweepAngle <= 0) {
-        startAngle -= rawSweep;
-        continue;
-      }
-
-      for (int row = 0; row < rows; row++) {
-        final radius = maxRadius - row * rowSpacing;
-        final seatsInRow = (sweepAngle * radius / (seatRadius * 2)).floor();
-        if (seatsInRow <= 0) continue;
-
-        for (int i = 0; i < seatsInRow; i++) {
-          final angle = startAngle - (sweepAngle * i / seatsInRow);
-          final offset = Offset(
-            center.dx + radius * math.cos(angle),
-            center.dy - radius * math.sin(angle),
-          );
-          final dx = position.dx - offset.dx;
-          final dy = position.dy - offset.dy;
-          if (dx * dx + dy * dy <= hoverRadiusSq) {
-            return block.label;
-          }
-        }
-      }
-
-      startAngle -= rawSweep;
-    }
-
-    return null;
-  }
-
-  void _scheduleHoverUpdate(String? party) {
-    _pendingHoverParty = party;
-    if (_hoverUpdateScheduled) return;
-    _hoverUpdateScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _hoverUpdateScheduled = false;
-      if (!mounted) return;
-      if (_hoveredParty == _pendingHoverParty) return;
-      setState(() {
-        _hoveredParty = _pendingHoverParty;
-      });
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final blocks = _buildBlocks();
     final totalSeats = blocks.fold<int>(0, (sum, block) => sum + block.seats);
     final legendEntries = _buildLegendEntries();
+    final activeParty = _selectedParty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,31 +126,13 @@ class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
                   constraints.maxWidth,
                   constraints.maxHeight,
                 );
-                return MouseRegion(
-                  onHover: (event) {
-                    final hovered = _hitTestParty(
-                      event.localPosition,
-                      paintSize,
-                      blocks,
-                      totalSeats,
-                    );
-                    if (hovered != _hoveredParty) {
-                      _scheduleHoverUpdate(hovered);
-                    }
-                  },
-                  onExit: (_) {
-                    if (_hoveredParty != null) {
-                      _scheduleHoverUpdate(null);
-                    }
-                  },
-                  child: CustomPaint(
-                    painter: _ParliamentPainter(
-                      blocks: blocks,
-                      totalSeats: totalSeats,
-                      markerThresholds: widget.markerThresholds,
-                    ),
-                    size: paintSize,
+                return CustomPaint(
+                  painter: _ParliamentPainter(
+                    blocks: blocks,
+                    totalSeats: totalSeats,
+                    markerThresholds: widget.markerThresholds,
                   ),
+                  size: paintSize,
                 );
               },
             ),
@@ -231,59 +145,66 @@ class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
             runSpacing: 6,
             children: legendEntries.map((entry) {
               final color = widget.partyColors[entry.key] ?? Colors.grey;
-              final isHighlighted = entry.key == _hoveredParty;
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 150),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color:
-                      isHighlighted ? color.withOpacity(0.12) : Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isHighlighted
-                        ? color.withOpacity(0.85)
-                        : color.withOpacity(0.25),
-                    width: isHighlighted ? 1.5 : 1,
+              final isHighlighted = entry.key == activeParty;
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedParty = isHighlighted ? null : entry.key;
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          Colors.black.withOpacity(isHighlighted ? 0.08 : 0.04),
-                      blurRadius: isHighlighted ? 8 : 6,
-                      offset: const Offset(0, 2),
+                  decoration: BoxDecoration(
+                    color:
+                        isHighlighted ? color.withOpacity(0.12) : Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isHighlighted
+                          ? color.withOpacity(0.85)
+                          : color.withOpacity(0.25),
+                      width: isHighlighted ? 1.5 : 1,
                     ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildPartyLogo(
-                      entry.key,
-                      color,
-                      highlighted: isHighlighted,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      entry.key,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                        color: isHighlighted ? color : Colors.black87,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black
+                            .withOpacity(isHighlighted ? 0.08 : 0.04),
+                        blurRadius: isHighlighted ? 8 : 6,
+                        offset: const Offset(0, 2),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      "${entry.value}",
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        color: color,
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildPartyLogo(
+                        entry.key,
+                        color,
+                        highlighted: isHighlighted,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 6),
+                      Text(
+                        entry.key,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          color: isHighlighted ? color : Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        "${entry.value}",
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }).toList(),

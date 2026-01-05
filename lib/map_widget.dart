@@ -7,17 +7,18 @@ import 'alliance_calculator.dart';
 // -------------------------------------------------------------
 // TÜRKİYE HARİTASI WIDGET'I
 // -------------------------------------------------------------
-class MapWidget extends StatelessWidget {
+class MapWidget extends StatefulWidget {
   final List<dynamic> features;
   final double scale;
   final Offset offset;
-  final Map<String, RegionResult>? regionResults; // Bölge sonuçları
-  final Map<String, RegionAllianceResult>? regionAllianceResults; // İttifak sonuçları
+  final Map<String, RegionResult>? regionResults;
+  final Map<String, RegionAllianceResult>? regionAllianceResults;
   final bool useAllianceColors;
-  final Function(String regionId)? onRegionTap; // Tıklama callback'i
+  final Function(String regionId)? onRegionTap;
   final ValueChanged<ScaleUpdateDetails> onScaleUpdate;
 
   const MapWidget({
+    super.key,
     required this.features,
     required this.scale,
     required this.offset,
@@ -26,34 +27,178 @@ class MapWidget extends StatelessWidget {
     this.useAllianceColors = false,
     this.onRegionTap,
     required this.onScaleUpdate,
-    super.key,
   });
 
   @override
+  State<MapWidget> createState() => _MapWidgetState();
+}
+
+class _MapWidgetState extends State<MapWidget> {
+  final ValueNotifier<String?> hoveredProvince = ValueNotifier(null);
+  DateTime? _lastHoverTime;
+
+  static const hoverThrottle = Duration(milliseconds: 40);
+
+  void _handleHover(String? province) {
+    if (province == null) {
+      _clearHover();
+      return;
+    }
+
+    final now = DateTime.now();
+    if (_lastHoverTime != null &&
+        now.difference(_lastHoverTime!) < hoverThrottle) {
+      return;
+    }
+
+    _lastHoverTime = now;
+
+    if (hoveredProvince.value != province) {
+      hoveredProvince.value = province;
+    }
+  }
+
+  void _clearHover() {
+    if (hoveredProvince.value != null) {
+      hoveredProvince.value = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    hoveredProvince.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onScaleUpdate: onScaleUpdate,
-      child: SizedBox.expand(
-        child: CustomPaint(
-          painter: MapPainter(
-            features: features,
-            scale: scale,
-            offset: offset,
-            regionResults: regionResults,
-            regionAllianceResults: regionAllianceResults,
-            useAllianceColors: useAllianceColors,
-            onRegionTap: onRegionTap,
-          ),
+    return RepaintBoundary(
+      child: MouseRegion(
+        onExit: (_) => _clearHover(),
+        onHover: (event) {
+          final regionId = _getRegionAtPosition(event.localPosition);
+          _handleHover(regionId);
+        },
+        child: ValueListenableBuilder<String?>(
+          valueListenable: hoveredProvince,
+          builder: (_, hovered, __) {
+            return GestureDetector(
+              onScaleUpdate: widget.onScaleUpdate,
+              child: SizedBox.expand(
+                child: CustomPaint(
+                  painter: _TurkeyMapPainter(
+                    features: widget.features,
+                    scale: widget.scale,
+                    offset: widget.offset,
+                    regionResults: widget.regionResults,
+                    regionAllianceResults: widget.regionAllianceResults,
+                    useAllianceColors: widget.useAllianceColors,
+                    hoveredProvince: hovered,
+                    onRegionTap: widget.onRegionTap,
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
+  }
+
+  String? _getRegionAtPosition(Offset position) {
+    final size = context.size;
+    if (size == null) return null;
+
+    const double minLon = 25.0;
+    const double maxLon = 45.0;
+    const double minLat = 35.8;
+    const double maxLat = 42.2;
+
+    final lonRange = maxLon - minLon;
+    final latRange = maxLat - minLat;
+
+    final scaleX = size.width / lonRange;
+    final scaleY = size.height / latRange;
+    final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
+
+    final mapWidth = lonRange * realScale;
+    final mapHeight = latRange * realScale;
+    final centerOffsetX = (size.width - mapWidth) / 2;
+    final centerOffsetY = (size.height - mapHeight) / 2;
+
+    final translated =
+        position - Offset(centerOffsetX, centerOffsetY) - widget.offset;
+    final localPoint = translated / widget.scale;
+
+    for (var feature in widget.features) {
+      final properties = feature["properties"];
+      final regionId = properties?["id"] as String?;
+      final geom = feature["geometry"];
+      if (regionId == null || geom == null) continue;
+
+      if (_pointInGeometry(localPoint, geom, minLon, maxLat, realScale)) {
+        return regionId;
+      }
+    }
+
+    return null;
+  }
+
+  bool _pointInGeometry(
+    Offset point,
+    dynamic geom,
+    double minLon,
+    double maxLat,
+    double scale,
+  ) {
+    bool contains = false;
+
+    void testPolygon(List<dynamic> polygon) {
+      for (var ring in polygon) {
+        final path = Path();
+        bool first = true;
+
+        for (var c in ring) {
+          final lon = (c[0] as num).toDouble();
+          final lat = (c[1] as num).toDouble();
+
+          final x = (lon - minLon) * scale;
+          final y = (maxLat - lat) * scale;
+
+          if (first) {
+            path.moveTo(x, y);
+            first = false;
+          } else {
+            path.lineTo(x, y);
+          }
+        }
+
+        path.close();
+
+        if (path.contains(point)) {
+          contains = true;
+          return;
+        }
+      }
+    }
+
+    if (geom["type"] == "Polygon") {
+      testPolygon(geom["coordinates"]);
+    } else if (geom["type"] == "MultiPolygon") {
+      for (var poly in geom["coordinates"]) {
+        testPolygon(poly);
+        if (contains) break;
+      }
+    }
+
+    return contains;
   }
 }
 
 // -------------------------------------------------------------
 // TÜRKİYE HARİTASI ÇİZİMİ
 // -------------------------------------------------------------
-class MapPainter extends CustomPainter {
+class _TurkeyMapPainter extends CustomPainter {
   final List<dynamic> features;
   final double scale;
   final Offset offset;
@@ -61,8 +206,9 @@ class MapPainter extends CustomPainter {
   final Map<String, RegionAllianceResult>? regionAllianceResults;
   final bool useAllianceColors;
   final Function(String regionId)? onRegionTap;
+  final String? hoveredProvince;
 
-  MapPainter({
+  _TurkeyMapPainter({
     required this.features,
     required this.scale,
     required this.offset,
@@ -70,6 +216,7 @@ class MapPainter extends CustomPainter {
     this.regionAllianceResults,
     this.useAllianceColors = false,
     this.onRegionTap,
+    this.hoveredProvince,
   });
 
   static const double minLon = 25.0;
@@ -93,11 +240,6 @@ class MapPainter extends CustomPainter {
 
     canvas.translate(offset.dx + centerOffsetX, offset.dy + centerOffsetY);
     canvas.scale(scale);
-
-    final strokePaint = Paint()
-      ..color = Colors.blueGrey.shade600
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.7 / scale;
 
     for (var feature in features) {
       final properties = feature["properties"];
@@ -125,8 +267,15 @@ class MapPainter extends CustomPainter {
         }
       }
 
+      final isHovered = hoveredProvince == regionId;
+
+      final strokePaint = Paint()
+        ..color = isHovered ? Colors.black : Colors.blueGrey.shade600
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (isHovered ? 1.5 : 0.7) / scale;
+
       final fillPaint = Paint()
-        ..color = regionColor
+        ..color = isHovered ? regionColor.withOpacity(0.8) : regionColor
         ..style = PaintingStyle.fill;
 
       if (geom["type"] == "Polygon") {
@@ -176,13 +325,14 @@ class MapPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant MapPainter oldDelegate) =>
+  bool shouldRepaint(covariant _TurkeyMapPainter oldDelegate) =>
       oldDelegate.features != features ||
       oldDelegate.scale != scale ||
       oldDelegate.offset != offset ||
       oldDelegate.regionResults != regionResults ||
       oldDelegate.regionAllianceResults != regionAllianceResults ||
-      oldDelegate.useAllianceColors != useAllianceColors;
+      oldDelegate.useAllianceColors != useAllianceColors ||
+      oldDelegate.hoveredProvince != hoveredProvince;
 
   @override
   bool? hitTest(Offset position) => true;
@@ -221,6 +371,8 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
   late double _scale;
   late Offset _offset;
   String? _hoveredRegion;
+  Offset? _pendingHoverPosition;
+  bool _hoverUpdateScheduled = false;
 
   @override
   void initState() {
@@ -270,12 +422,21 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
   }
 
   void _handlePointerHover(PointerHoverEvent event) {
-    final regionId = _getRegionAtPosition(event.localPosition);
-    if (regionId != _hoveredRegion) {
-      setState(() {
-        _hoveredRegion = regionId;
-      });
-    }
+    _pendingHoverPosition = event.localPosition;
+    if (_hoverUpdateScheduled) return;
+    _hoverUpdateScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _hoverUpdateScheduled = false;
+      if (!mounted) return;
+      final position = _pendingHoverPosition;
+      if (position == null) return;
+      final regionId = _getRegionAtPosition(position);
+      if (regionId != _hoveredRegion) {
+        setState(() {
+          _hoveredRegion = regionId;
+        });
+      }
+    });
   }
 
   String? _getRegionAtPosition(Offset position) {
@@ -521,3 +682,4 @@ String? _partyWithHighestVote(Map<String, double> votes) {
 
   return leader;
 }
+
