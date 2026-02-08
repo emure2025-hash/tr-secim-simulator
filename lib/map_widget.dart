@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'color_engine.dart';
@@ -36,6 +37,9 @@ class MapWidget extends StatefulWidget {
 class _MapWidgetState extends State<MapWidget> {
   final ValueNotifier<String?> hoveredProvince = ValueNotifier(null);
   DateTime? _lastHoverTime;
+  Size? _geometrySize;
+  List<dynamic>? _geometryFeatures;
+  final List<_RegionGeometry> _regionGeometries = [];
 
   static const hoverThrottle = Duration(milliseconds: 40);
 
@@ -84,19 +88,26 @@ class _MapWidgetState extends State<MapWidget> {
           builder: (_, hovered, __) {
             return GestureDetector(
               onScaleUpdate: widget.onScaleUpdate,
-              child: SizedBox.expand(
-                child: CustomPaint(
-                  painter: _TurkeyMapPainter(
-                    features: widget.features,
-                    scale: widget.scale,
-                    offset: widget.offset,
-                    regionResults: widget.regionResults,
-                    regionAllianceResults: widget.regionAllianceResults,
-                    useAllianceColors: widget.useAllianceColors,
-                    hoveredProvince: hovered,
-                    onRegionTap: widget.onRegionTap,
-                  ),
-                ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final size = Size(constraints.maxWidth, constraints.maxHeight);
+                  _ensureGeometryCache(size);
+                  return SizedBox.expand(
+                    child: CustomPaint(
+                      painter: _TurkeyMapPainter(
+                        features: widget.features,
+                        scale: widget.scale,
+                        offset: widget.offset,
+                        regionResults: widget.regionResults,
+                        regionAllianceResults: widget.regionAllianceResults,
+                        useAllianceColors: widget.useAllianceColors,
+                        hoveredProvince: hovered,
+                        onRegionTap: widget.onRegionTap,
+                        regionGeometries: _regionGeometries,
+                      ),
+                    ),
+                  );
+                },
               ),
             );
           },
@@ -108,6 +119,8 @@ class _MapWidgetState extends State<MapWidget> {
   String? _getRegionAtPosition(Offset position) {
     final size = context.size;
     if (size == null) return null;
+    _ensureGeometryCache(size);
+    _ensureGeometryCache(size);
 
     const double minLon = 25.0;
     const double maxLon = 45.0;
@@ -130,68 +143,86 @@ class _MapWidgetState extends State<MapWidget> {
         position - Offset(centerOffsetX, centerOffsetY) - widget.offset;
     final localPoint = translated / widget.scale;
 
-    for (var feature in widget.features) {
-      final properties = feature["properties"];
-      final regionId = properties?["id"] as String?;
-      final geom = feature["geometry"];
-      if (regionId == null || geom == null) continue;
-
-      if (_pointInGeometry(localPoint, geom, minLon, maxLat, realScale)) {
-        return regionId;
+    for (final geometry in _regionGeometries) {
+      for (final path in geometry.paths) {
+        if (path.contains(localPoint)) {
+          return geometry.regionId;
+        }
       }
     }
 
     return null;
   }
 
-  bool _pointInGeometry(
-    Offset point,
-    dynamic geom,
-    double minLon,
-    double maxLat,
-    double scale,
-  ) {
-    bool contains = false;
+  void _ensureGeometryCache(Size size) {
+    if (size.isEmpty) return;
+    if (identical(_geometryFeatures, widget.features) &&
+        _geometrySize == size &&
+        _regionGeometries.isNotEmpty) {
+      return;
+    }
 
-    void testPolygon(List<dynamic> polygon) {
-      for (var ring in polygon) {
-        final path = Path();
-        bool first = true;
+    _geometryFeatures = widget.features;
+    _geometrySize = size;
+    _regionGeometries.clear();
 
-        for (var c in ring) {
-          final lon = (c[0] as num).toDouble();
-          final lat = (c[1] as num).toDouble();
+    const double minLon = 25.0;
+    const double maxLon = 45.0;
+    const double minLat = 35.8;
+    const double maxLat = 42.2;
 
-          final x = (lon - minLon) * scale;
-          final y = (maxLat - lat) * scale;
+    final lonRange = maxLon - minLon;
+    final latRange = maxLat - minLat;
+    final scaleX = size.width / lonRange;
+    final scaleY = size.height / latRange;
+    final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
 
-          if (first) {
-            path.moveTo(x, y);
-            first = false;
-          } else {
-            path.lineTo(x, y);
+    for (var feature in widget.features) {
+      final properties = feature["properties"];
+      final regionId = properties?["id"] as String?;
+      final geom = feature["geometry"];
+      if (regionId == null || geom == null) continue;
+
+      final paths = <Path>[];
+
+      void addPolygon(List<dynamic> polygon) {
+        for (var ring in polygon) {
+          final path = Path();
+          bool first = true;
+          for (var c in ring) {
+            final lon = (c[0] as num).toDouble();
+            final lat = (c[1] as num).toDouble();
+            final x = (lon - minLon) * realScale;
+            final y = (maxLat - lat) * realScale;
+            if (first) {
+              path.moveTo(x, y);
+              first = false;
+            } else {
+              path.lineTo(x, y);
+            }
           }
-        }
-
-        path.close();
-
-        if (path.contains(point)) {
-          contains = true;
-          return;
+          path.close();
+          paths.add(path);
         }
       }
-    }
 
-    if (geom["type"] == "Polygon") {
-      testPolygon(geom["coordinates"]);
-    } else if (geom["type"] == "MultiPolygon") {
-      for (var poly in geom["coordinates"]) {
-        testPolygon(poly);
-        if (contains) break;
+      if (geom["type"] == "Polygon") {
+        addPolygon(geom["coordinates"]);
+      } else if (geom["type"] == "MultiPolygon") {
+        for (var poly in geom["coordinates"]) {
+          addPolygon(poly);
+        }
+      }
+
+      if (paths.isNotEmpty) {
+        _regionGeometries.add(
+          _RegionGeometry(
+            regionId: regionId,
+            paths: paths,
+          ),
+        );
       }
     }
-
-    return contains;
   }
 }
 
@@ -207,6 +238,7 @@ class _TurkeyMapPainter extends CustomPainter {
   final bool useAllianceColors;
   final Function(String regionId)? onRegionTap;
   final String? hoveredProvince;
+  final List<_RegionGeometry>? regionGeometries;
 
   _TurkeyMapPainter({
     required this.features,
@@ -217,6 +249,7 @@ class _TurkeyMapPainter extends CustomPainter {
     this.useAllianceColors = false,
     this.onRegionTap,
     this.hoveredProvince,
+    this.regionGeometries,
   });
 
   static const double minLon = 25.0;
@@ -240,6 +273,48 @@ class _TurkeyMapPainter extends CustomPainter {
 
     canvas.translate(offset.dx + centerOffsetX, offset.dy + centerOffsetY);
     canvas.scale(scale);
+
+    final geometries = regionGeometries;
+    if (geometries != null && geometries.isNotEmpty) {
+      for (final geometry in geometries) {
+        final regionId = geometry.regionId;
+        Color regionColor = Colors.grey.shade300;
+        if (useAllianceColors &&
+            regionAllianceResults != null &&
+            regionAllianceResults!.containsKey(regionId)) {
+          final result = regionAllianceResults![regionId]!;
+          final leader =
+              result.leadingPartyPerAlliance[result.winnerAlliance];
+          regionColor = leader != null
+              ? colorForParty(leader)
+              : colorForAlliance(result.winnerAlliance);
+        } else if (regionResults != null &&
+            regionResults!.containsKey(regionId)) {
+          final result = regionResults![regionId]!;
+          final leadingParty = _partyWithHighestVote(result.votes);
+          if (leadingParty != null) {
+            regionColor = colorForParty(leadingParty);
+          }
+        }
+
+        final isHovered = hoveredProvince == regionId;
+
+        final strokePaint = Paint()
+          ..color = isHovered ? Colors.black : Colors.blueGrey.shade600
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = (isHovered ? 1.5 : 0.7) / scale;
+
+        final fillPaint = Paint()
+          ..color = isHovered ? regionColor.withOpacity(0.8) : regionColor
+          ..style = PaintingStyle.fill;
+
+        for (final path in geometry.paths) {
+          canvas.drawPath(path, fillPaint);
+          canvas.drawPath(path, strokePaint);
+        }
+      }
+      return;
+    }
 
     for (var feature in features) {
       final properties = feature["properties"];
@@ -332,7 +407,8 @@ class _TurkeyMapPainter extends CustomPainter {
       oldDelegate.regionResults != regionResults ||
       oldDelegate.regionAllianceResults != regionAllianceResults ||
       oldDelegate.useAllianceColors != useAllianceColors ||
-      oldDelegate.hoveredProvince != hoveredProvince;
+      oldDelegate.hoveredProvince != hoveredProvince ||
+      oldDelegate.regionGeometries != regionGeometries;
 
   @override
   bool? hitTest(Offset position) => true;
@@ -373,6 +449,16 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
   String? _hoveredRegion;
   Offset? _pendingHoverPosition;
   bool _hoverUpdateScheduled = false;
+  Size? _geometrySize;
+  List<dynamic>? _geometryFeatures;
+  final List<_RegionGeometry> _regionGeometries = [];
+  ui.Picture? _basePicture;
+  Size? _basePictureSize;
+  double? _basePictureScale;
+  List<dynamic>? _basePictureFeatures;
+  Map<String, RegionResult>? _basePictureRegionResults;
+  Map<String, RegionAllianceResult>? _basePictureRegionAllianceResults;
+  bool? _basePictureUseAllianceColors;
 
   @override
   void initState() {
@@ -388,26 +474,44 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
 
     return Listener(
       onPointerDown: (event) => _handlePointerDown(event),
-      onPointerHover: (event) => _handlePointerHover(event),
-      child: GestureDetector(
-        onScaleUpdate: (details) {
-          setState(() {
-            _scale = (_scale * details.scale).clamp(0.5, 3.0);
-            _offset = _offset + details.focalPointDelta;
-          });
-          widget.onTransform?.call(_scale, _offset);
+      child: MouseRegion(
+        onExit: (_) {
+          if (_hoveredRegion != null) {
+            setState(() {
+              _hoveredRegion = null;
+            });
+          }
         },
-        child: SizedBox.expand(
-          child: CustomPaint(
-            painter: InteractiveMapPainter(
-              features: widget.features,
-              scale: _scale,
-              offset: _offset,
-              regionResults: widget.regionResults,
-              regionAllianceResults: widget.regionAllianceResults,
-              useAllianceColors: widget.useAllianceColors,
-              hoveredRegion: _hoveredRegion,
-            ),
+        onHover: (event) => _handlePointerHover(event),
+        child: GestureDetector(
+          onScaleUpdate: (details) {
+            setState(() {
+              _scale = (_scale * details.scale).clamp(0.5, 3.0);
+              _offset = _offset + details.focalPointDelta;
+            });
+            widget.onTransform?.call(_scale, _offset);
+          },
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final size = Size(constraints.maxWidth, constraints.maxHeight);
+              _ensureGeometryCache(size);
+              _ensureBasePicture(size, _scale);
+              return SizedBox.expand(
+                child: CustomPaint(
+                  painter: InteractiveMapPainter(
+                    features: widget.features,
+                    scale: _scale,
+                    offset: _offset,
+                    regionResults: widget.regionResults,
+                    regionAllianceResults: widget.regionAllianceResults,
+                    useAllianceColors: widget.useAllianceColors,
+                    hoveredRegion: _hoveredRegion,
+                    regionGeometries: _regionGeometries,
+                    basePicture: _basePicture,
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -463,68 +567,145 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
     final translated = position - Offset(centerOffsetX, centerOffsetY) - _offset;
     final localPoint = translated / _scale;
 
-    for (var feature in widget.features) {
-      final properties = feature["properties"];
-      final regionId = properties?["id"] as String?;
-      final geom = feature["geometry"];
-      if (regionId == null || geom == null) continue;
-
-      if (_pointInGeometry(localPoint, geom, minLon, maxLat, realScale)) {
-        return regionId;
+    for (final geometry in _regionGeometries) {
+      for (final path in geometry.paths) {
+        if (path.contains(localPoint)) {
+          return geometry.regionId;
+        }
       }
     }
 
     return null;
   }
 
-  bool _pointInGeometry(
-    Offset point,
-    dynamic geom,
-    double minLon,
-    double maxLat,
-    double scale,
-  ) {
-    bool contains = false;
+  void _ensureGeometryCache(Size size) {
+    if (size.isEmpty) return;
+    if (identical(_geometryFeatures, widget.features) &&
+        _geometrySize == size &&
+        _regionGeometries.isNotEmpty) {
+      return;
+    }
 
-    void testPolygon(List<dynamic> polygon) {
-      for (var ring in polygon) {
-        final path = Path();
-        bool first = true;
+    _geometryFeatures = widget.features;
+    _geometrySize = size;
+    _regionGeometries.clear();
 
-        for (var c in ring) {
-          final lon = (c[0] as num).toDouble();
-          final lat = (c[1] as num).toDouble();
+    const double minLon = 25.0;
+    const double maxLon = 45.0;
+    const double minLat = 35.8;
+    const double maxLat = 42.2;
 
-          final x = (lon - minLon) * scale;
-          final y = (maxLat - lat) * scale;
+    final lonRange = maxLon - minLon;
+    final latRange = maxLat - minLat;
+    final scaleX = size.width / lonRange;
+    final scaleY = size.height / latRange;
+    final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
 
-          if (first) {
-            path.moveTo(x, y);
-            first = false;
-          } else {
-            path.lineTo(x, y);
+    for (var feature in widget.features) {
+      final properties = feature["properties"];
+      final regionId = properties?["id"] as String?;
+      final geom = feature["geometry"];
+      if (regionId == null || geom == null) continue;
+
+      final paths = <Path>[];
+
+      void addPolygon(List<dynamic> polygon) {
+        for (var ring in polygon) {
+          final path = Path();
+          bool first = true;
+          for (var c in ring) {
+            final lon = (c[0] as num).toDouble();
+            final lat = (c[1] as num).toDouble();
+            final x = (lon - minLon) * realScale;
+            final y = (maxLat - lat) * realScale;
+            if (first) {
+              path.moveTo(x, y);
+              first = false;
+            } else {
+              path.lineTo(x, y);
+            }
           }
+          path.close();
+          paths.add(path);
         }
+      }
 
-        path.close();
-
-        if (path.contains(point)) {
-          contains = true;
-          return;
+      if (geom["type"] == "Polygon") {
+        addPolygon(geom["coordinates"]);
+      } else if (geom["type"] == "MultiPolygon") {
+        for (var poly in geom["coordinates"]) {
+          addPolygon(poly);
         }
+      }
+
+      if (paths.isNotEmpty) {
+        _regionGeometries.add(
+          _RegionGeometry(
+            regionId: regionId,
+            paths: paths,
+          ),
+        );
+      }
+    }
+  }
+
+  void _ensureBasePicture(Size size, double scale) {
+    if (size.isEmpty || _regionGeometries.isEmpty) return;
+    if (identical(_basePictureFeatures, widget.features) &&
+        _basePictureSize == size &&
+        _basePictureScale == scale &&
+        _basePictureRegionResults == widget.regionResults &&
+        _basePictureRegionAllianceResults == widget.regionAllianceResults &&
+        _basePictureUseAllianceColors == widget.useAllianceColors &&
+        _basePicture != null) {
+      return;
+    }
+
+    _basePictureFeatures = widget.features;
+    _basePictureSize = size;
+    _basePictureScale = scale;
+    _basePictureRegionResults = widget.regionResults;
+    _basePictureRegionAllianceResults = widget.regionAllianceResults;
+    _basePictureUseAllianceColors = widget.useAllianceColors;
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    for (final geometry in _regionGeometries) {
+      final regionId = geometry.regionId;
+      Color regionColor = Colors.grey.shade300;
+      if (widget.useAllianceColors &&
+          widget.regionAllianceResults != null &&
+          widget.regionAllianceResults!.containsKey(regionId)) {
+        final result = widget.regionAllianceResults![regionId]!;
+        final leader = result.leadingPartyPerAlliance[result.winnerAlliance];
+        regionColor =
+            leader != null ? colorForParty(leader) : colorForAlliance(result.winnerAlliance);
+      } else if (widget.regionResults != null &&
+          widget.regionResults!.containsKey(regionId)) {
+        final result = widget.regionResults![regionId]!;
+        final leadingParty = _partyWithHighestVote(result.votes);
+        if (leadingParty != null) {
+          regionColor = colorForParty(leadingParty);
+        }
+      }
+
+      final strokePaint = Paint()
+        ..color = Colors.blueGrey.shade600
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.7 / scale;
+
+      final fillPaint = Paint()
+        ..color = regionColor
+        ..style = PaintingStyle.fill;
+
+      for (final path in geometry.paths) {
+        canvas.drawPath(path, fillPaint);
+        canvas.drawPath(path, strokePaint);
       }
     }
 
-    if (geom["type"] == "Polygon") {
-      testPolygon(geom["coordinates"]);
-    } else if (geom["type"] == "MultiPolygon") {
-      for (var poly in geom["coordinates"]) {
-        testPolygon(poly);
-        if (contains) break;
-      }
-    }
-
-    return contains;
+    _basePicture = recorder.endRecording();
   }
 }
 
@@ -536,6 +717,8 @@ class InteractiveMapPainter extends CustomPainter {
   final Map<String, RegionAllianceResult>? regionAllianceResults;
   final bool useAllianceColors;
   final String? hoveredRegion;
+  final List<_RegionGeometry>? regionGeometries;
+  final ui.Picture? basePicture;
 
   InteractiveMapPainter({
     required this.features,
@@ -545,6 +728,8 @@ class InteractiveMapPainter extends CustomPainter {
     this.regionAllianceResults,
     this.useAllianceColors = false,
     this.hoveredRegion,
+    this.regionGeometries,
+    this.basePicture,
   });
 
   static const double minLon = 25.0;
@@ -568,6 +753,53 @@ class InteractiveMapPainter extends CustomPainter {
 
     canvas.translate(offset.dx + centerOffsetX, offset.dy + centerOffsetY);
     canvas.scale(scale);
+
+    final geometries = regionGeometries;
+    if (geometries != null && geometries.isNotEmpty && basePicture != null) {
+      canvas.drawPicture(basePicture!);
+      if (hoveredRegion == null) return;
+      _paintHoveredRegion(canvas, geometries, hoveredRegion!);
+      return;
+    }
+
+    if (geometries != null && geometries.isNotEmpty) {
+      for (final geometry in geometries) {
+        final regionId = geometry.regionId;
+        Color regionColor = Colors.grey.shade300;
+        if (useAllianceColors &&
+            regionAllianceResults != null &&
+            regionAllianceResults!.containsKey(regionId)) {
+          final result = regionAllianceResults![regionId]!;
+          final leader =
+              result.leadingPartyPerAlliance[result.winnerAlliance];
+          regionColor = leader != null
+              ? colorForParty(leader)
+              : colorForAlliance(result.winnerAlliance);
+        } else if (regionResults != null &&
+            regionResults!.containsKey(regionId)) {
+          final result = regionResults![regionId]!;
+          final leadingParty = _partyWithHighestVote(result.votes);
+          if (leadingParty != null) {
+            regionColor = colorForParty(leadingParty);
+          }
+        }
+
+        final isHovered = hoveredRegion == regionId;
+        final strokePaint = Paint()
+          ..color = isHovered ? Colors.black : Colors.blueGrey.shade600
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = (isHovered ? 1.5 : 0.7) / scale;
+        final fillPaint = Paint()
+          ..color = isHovered ? regionColor.withOpacity(0.8) : regionColor
+          ..style = PaintingStyle.fill;
+
+        for (final path in geometry.paths) {
+          canvas.drawPath(path, fillPaint);
+          canvas.drawPath(path, strokePaint);
+        }
+      }
+      return;
+    }
 
     for (var feature in features) {
       final properties = feature["properties"];
@@ -662,7 +894,55 @@ class InteractiveMapPainter extends CustomPainter {
       oldDelegate.regionResults != regionResults ||
       oldDelegate.regionAllianceResults != regionAllianceResults ||
       oldDelegate.useAllianceColors != useAllianceColors ||
-      oldDelegate.hoveredRegion != hoveredRegion;
+      oldDelegate.hoveredRegion != hoveredRegion ||
+      oldDelegate.regionGeometries != regionGeometries ||
+      oldDelegate.basePicture != basePicture;
+
+  void _paintHoveredRegion(
+    Canvas canvas,
+    List<_RegionGeometry> geometries,
+    String hoveredId,
+  ) {
+    _RegionGeometry? geometry;
+    for (final item in geometries) {
+      if (item.regionId == hoveredId) {
+        geometry = item;
+        break;
+      }
+    }
+    if (geometry == null) return;
+
+    Color regionColor = Colors.grey.shade300;
+    if (useAllianceColors &&
+        regionAllianceResults != null &&
+        regionAllianceResults!.containsKey(hoveredId)) {
+      final result = regionAllianceResults![hoveredId]!;
+      final leader = result.leadingPartyPerAlliance[result.winnerAlliance];
+      regionColor =
+          leader != null ? colorForParty(leader) : colorForAlliance(result.winnerAlliance);
+    } else if (regionResults != null &&
+        regionResults!.containsKey(hoveredId)) {
+      final result = regionResults![hoveredId]!;
+      final leadingParty = _partyWithHighestVote(result.votes);
+      if (leadingParty != null) {
+        regionColor = colorForParty(leadingParty);
+      }
+    }
+
+    final strokePaint = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5 / scale;
+
+    final fillPaint = Paint()
+      ..color = regionColor.withOpacity(0.8)
+      ..style = PaintingStyle.fill;
+
+    for (final path in geometry.paths) {
+      canvas.drawPath(path, fillPaint);
+      canvas.drawPath(path, strokePaint);
+    }
+  }
 }
 
 /// Bölgedeki en yüksek oy oranına sahip partiyi döndürür
@@ -681,5 +961,15 @@ String? _partyWithHighestVote(Map<String, double> votes) {
   });
 
   return leader;
+}
+
+class _RegionGeometry {
+  final String regionId;
+  final List<Path> paths;
+
+  const _RegionGeometry({
+    required this.regionId,
+    required this.paths,
+  });
 }
 
