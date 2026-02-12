@@ -521,7 +521,7 @@ class _ResultScreenState extends State<ResultScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Simulasyon Sonuclari"),
+        title: const Text("Simülasyon Sonuçları"),
         backgroundColor: Colors.blueGrey.shade700,
         foregroundColor: Colors.white,
         leading: IconButton(
@@ -541,7 +541,7 @@ class _ResultScreenState extends State<ResultScreen> {
                   ),
                   ButtonSegment(
                     value: MapMode.alliance,
-                    label: Text("Ittifak"),
+                    label: Text("İttifak"),
                     icon: Icon(Icons.groups),
                   ),
                 ],
@@ -607,7 +607,7 @@ class _ResultScreenState extends State<ResultScreen> {
                               ),
                               ButtonSegment(
                                 value: MapMode.alliance,
-                                label: Text("Ittifak"),
+                                label: Text("İttifak"),
                                 icon: Icon(Icons.groups),
                               ),
                             ],
@@ -647,7 +647,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       const Text(
-                                        "Koltuk Dagilimi (Pie)",
+                                        "Koltuk dağılımı (pie)",
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.bold,
@@ -722,6 +722,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                   key: ValueKey('$_sliderMode-${seatMap.length}'),
                                   seatsByParty: seatMap,
                                   partyColors: seatColorMap,
+                                  markerThresholds: const [300, 360, 400],
                                 ),
                               ),
                             ),
@@ -759,7 +760,7 @@ class _ResultScreenState extends State<ResultScreen> {
                             ),
                             ButtonSegment(
                               value: MapMode.alliance,
-                              label: Text("Ittifak"),
+                              label: Text("İttifak"),
                               icon: Icon(Icons.groups),
                             ),
                           ],

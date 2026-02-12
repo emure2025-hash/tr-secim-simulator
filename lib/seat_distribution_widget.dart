@@ -109,7 +109,7 @@ class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "Koltuk DaŽYŽñlŽñmŽñ",
+          "Koltuk dağılımı (semi-circle)",
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
@@ -131,6 +131,7 @@ class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
                     blocks: blocks,
                     totalSeats: totalSeats,
                     markerThresholds: widget.markerThresholds,
+                    highlightedParty: activeParty,
                   ),
                   size: paintSize,
                 );
@@ -219,15 +220,60 @@ class _ParliamentPainter extends CustomPainter {
   final List<PartyBlock> blocks;
   final int totalSeats;
   final List<int> markerThresholds;
+  final String? highlightedParty;
 
   _ParliamentPainter({
     required this.blocks,
     required this.totalSeats,
     required this.markerThresholds,
+    this.highlightedParty,
   });
 
   double _angleForThreshold(int seat) {
     return math.pi * (seat / totalSeats);
+  }
+
+  Offset _lineEndBeforeRect(
+    Offset start,
+    Offset direction,
+    Rect rect, {
+    double gap = 2,
+    required Offset fallbackEnd,
+  }) {
+    const double infinity = 1e9;
+    double tMin = -infinity;
+    double tMax = infinity;
+
+    void updateAxis(double startCoord, double dirCoord, double min, double max) {
+      if (dirCoord == 0) {
+        if (startCoord < min || startCoord > max) {
+          tMin = 1;
+          tMax = 0;
+        }
+        return;
+      }
+      final t1 = (min - startCoord) / dirCoord;
+      final t2 = (max - startCoord) / dirCoord;
+      final tLow = math.min(t1, t2);
+      final tHigh = math.max(t1, t2);
+      if (tLow > tMin) tMin = tLow;
+      if (tHigh < tMax) tMax = tHigh;
+    }
+
+    updateAxis(start.dx, direction.dx, rect.left, rect.right);
+    updateAxis(start.dy, direction.dy, rect.top, rect.bottom);
+
+    if (tMax < 0 || tMin > tMax) {
+      return fallbackEnd;
+    }
+
+    final tHit = tMin >= 0 ? tMin : tMax;
+    if (tHit <= 0) return fallbackEnd;
+    final tEnd = math.max(0, tHit - gap);
+    return Offset(
+      start.dx + direction.dx * tEnd,
+      start.dy + direction.dy * tEnd,
+    );
   }
 
   @override
@@ -262,16 +308,12 @@ class _ParliamentPainter extends CustomPainter {
     );
 
     final placedLabelRects = <Rect>[];
-    final fixedOffsets = <int, Offset>{
-      300: const Offset(-18, -6),
-      360: const Offset(18, -12),
-      400: const Offset(12, 6),
-    };
+    const baseLabelOffset = 16.0;
+    const radialSteps = <double>[0, 10, 20, 30, 40, 50];
     for (int i = 0; i < markerThresholds.length; i++) {
       final threshold = markerThresholds[i];
       if (threshold <= 0 || threshold > totalSeats) continue;
       final markerAngle = math.pi - _angleForThreshold(threshold);
-      final innerRadius = maxRadius - (rows - 1) * rowSpacing;
       final startRadius = maxRadius + markerOuterPad;
       final endRadius = maxRadius + markerOuterPad + markerLineLength;
       final start = Offset(
@@ -282,7 +324,6 @@ class _ParliamentPainter extends CustomPainter {
         center.dx + endRadius * math.cos(markerAngle),
         center.dy - endRadius * math.sin(markerAngle),
       );
-      canvas.drawLine(start, end, markerPaint);
 
       final direction = Offset(
         end.dx - center.dx,
@@ -290,13 +331,10 @@ class _ParliamentPainter extends CustomPainter {
       );
       final length = math.max(direction.distance, 0.001);
       final normal = Offset(direction.dx / length, direction.dy / length);
-      final tangent = Offset(-normal.dy, normal.dx);
-      final tangentialShift = (i.isEven ? -1.0 : 1.0) * 10;
       final baseOffset = Offset(
-        end.dx + normal.dx * 16 + tangent.dx * tangentialShift,
-        end.dy + normal.dy * 16 + tangent.dy * tangentialShift,
-      ) +
-          (fixedOffsets[threshold] ?? Offset.zero);
+        end.dx + normal.dx * baseLabelOffset,
+        end.dy + normal.dy * baseLabelOffset,
+      );
       final labelText = threshold.toString();
       final textPainter = TextPainter(
         text: TextSpan(style: labelTextStyle, text: labelText),
@@ -325,41 +363,36 @@ class _ParliamentPainter extends CustomPainter {
         return score;
       }
 
-      final radialSteps = <double>[0, 8, 16, 24, 32, 40];
-      final tangentialSteps = <double>[0, 8, 16, 24, 32];
       Rect? bestRect;
       double bestScore = double.infinity;
       double bestDistance = double.infinity;
       for (final radialStep in radialSteps) {
-        for (final tangentialStep in tangentialSteps) {
-          final tangentialSigns =
-              tangentialStep == 0 ? const [1.0] : const [1.0, -1.0];
-          for (final sign in tangentialSigns) {
-            final candidateOffset = baseOffset +
-                normal * radialStep +
-                tangent * (tangentialStep * sign);
-            final rect = resolveRect(candidateOffset);
-            final score = overlapScore(rect);
-            final distance = (candidateOffset - baseOffset).distance;
-            if (score == 0) {
-              bestRect = rect;
-              bestScore = 0;
-              bestDistance = distance;
-              break;
-            }
-            if (score < bestScore ||
-                (score == bestScore && distance < bestDistance)) {
-              bestRect = rect;
-              bestScore = score;
-              bestDistance = distance;
-            }
-          }
-          if (bestScore == 0) break;
+        final candidateOffset = baseOffset + normal * radialStep;
+        final rect = resolveRect(candidateOffset);
+        final score = overlapScore(rect);
+        if (score == 0) {
+          bestRect = rect;
+          bestScore = 0;
+          bestDistance = radialStep;
+          break;
         }
-        if (bestScore == 0) break;
+        if (score < bestScore ||
+            (score == bestScore && radialStep < bestDistance)) {
+          bestRect = rect;
+          bestScore = score;
+          bestDistance = radialStep;
+        }
       }
 
       final bgRect = bestRect ?? resolveRect(baseOffset);
+
+      final lineEnd = _lineEndBeforeRect(
+        start,
+        normal,
+        bgRect,
+        fallbackEnd: end,
+      );
+      canvas.drawLine(start, lineEnd, markerPaint);
 
       final bgRRect = RRect.fromRectAndRadius(
         bgRect,
@@ -377,31 +410,99 @@ class _ParliamentPainter extends CustomPainter {
       placedLabelRects.add(bgRect);
     }
 
-    double startAngle = math.pi;
+    final highlight = highlightedParty;
+    final hasHighlight = highlight != null &&
+        blocks.any((b) => b.label == highlight && b.seats > 0);
 
-    for (final block in blocks) {
-      final rawSweep = math.pi * (block.seats / totalSeats);
-      final gapAngle = math.min(baseGapAngle, rawSweep * 0.25);
-      final sweepAngle = rawSweep - gapAngle;
-      if (sweepAngle <= 0) {
+    if (hasHighlight) {
+      double startAngle = math.pi;
+      for (final block in blocks) {
+        final rawSweep = math.pi * (block.seats / totalSeats);
+        final gapAngle = math.min(baseGapAngle, rawSweep * 0.25);
+        final sweepAngle = rawSweep - gapAngle;
+        if (sweepAngle <= 0) {
+          startAngle -= rawSweep;
+          continue;
+        }
+
+        if (block.label != highlight) {
+          _drawPartyBlock(
+            canvas: canvas,
+            center: center,
+            startAngle: startAngle,
+            sweepAngle: sweepAngle,
+            color: block.color.withOpacity(0.2),
+            size: size,
+            rows: rows,
+            maxRadius: maxRadius,
+            seatRadius: seatRadius,
+            rowSpacing: rowSpacing,
+            seatRadiusScale: 0.85,
+            radiusBoost: 0.0,
+          );
+        }
         startAngle -= rawSweep;
-        continue;
       }
 
-      _drawPartyBlock(
-        canvas: canvas,
-        center: center,
-        startAngle: startAngle,
-        sweepAngle: sweepAngle,
-        color: block.color,
-        size: size,
-        rows: rows,
-        maxRadius: maxRadius,
-        seatRadius: seatRadius,
-        rowSpacing: rowSpacing,
-      );
+      double highlightStart = math.pi;
+      for (final block in blocks) {
+        final rawSweep = math.pi * (block.seats / totalSeats);
+        final gapAngle = math.min(baseGapAngle, rawSweep * 0.25);
+        final sweepAngle = rawSweep - gapAngle;
+        if (sweepAngle <= 0) {
+          highlightStart -= rawSweep;
+          continue;
+        }
 
-      startAngle -= rawSweep;
+        if (block.label == highlight) {
+          _drawPartyBlock(
+            canvas: canvas,
+            center: center,
+            startAngle: highlightStart,
+            sweepAngle: sweepAngle,
+            color: block.color,
+            size: size,
+            rows: rows,
+            maxRadius: maxRadius,
+            seatRadius: seatRadius,
+            rowSpacing: rowSpacing,
+            seatRadiusScale: 1.35,
+            radiusBoost: seatRadius * 1.1,
+            haloColor: block.color.withOpacity(0.35),
+            haloRadiusScale: 1.7,
+            strokeColor: Colors.white.withOpacity(0.9),
+            strokeWidth: 1.4,
+          );
+          break;
+        }
+        highlightStart -= rawSweep;
+      }
+    } else {
+      double startAngle = math.pi;
+      for (final block in blocks) {
+        final rawSweep = math.pi * (block.seats / totalSeats);
+        final gapAngle = math.min(baseGapAngle, rawSweep * 0.25);
+        final sweepAngle = rawSweep - gapAngle;
+        if (sweepAngle <= 0) {
+          startAngle -= rawSweep;
+          continue;
+        }
+
+        _drawPartyBlock(
+          canvas: canvas,
+          center: center,
+          startAngle: startAngle,
+          sweepAngle: sweepAngle,
+          color: block.color,
+          size: size,
+          rows: rows,
+          maxRadius: maxRadius,
+          seatRadius: seatRadius,
+          rowSpacing: rowSpacing,
+        );
+
+        startAngle -= rawSweep;
+      }
     }
   }
 
@@ -416,12 +517,33 @@ class _ParliamentPainter extends CustomPainter {
     required double maxRadius,
     required double seatRadius,
     required double rowSpacing,
+    double seatRadiusScale = 1.0,
+    double radiusBoost = 0.0,
+    Color? haloColor,
+    double haloRadiusScale = 1.0,
+    Color? strokeColor,
+    double strokeWidth = 1.0,
   }) {
     final paint = Paint()..color = color;
+    final drawRadius = seatRadius * seatRadiusScale;
+    final haloRadius = seatRadius * haloRadiusScale;
+    Paint? haloPaint;
+    if (haloColor != null) {
+      haloPaint = Paint()..color = haloColor;
+    }
+    Paint? strokePaint;
+    if (strokeColor != null) {
+      strokePaint = Paint()
+        ..color = strokeColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth;
+    }
 
     for (int row = 0; row < rows; row++) {
-      final radius = maxRadius - row * rowSpacing;
-      final seatsInRow = (sweepAngle * radius / (seatRadius * 2)).floor();
+      final baseRadius = maxRadius - row * rowSpacing;
+      final radius = baseRadius + radiusBoost;
+      final seatsInRow =
+          (sweepAngle * baseRadius / (seatRadius * 2)).floor();
 
       if (seatsInRow <= 0) continue;
 
@@ -431,7 +553,13 @@ class _ParliamentPainter extends CustomPainter {
           center.dx + radius * math.cos(angle),
           center.dy - radius * math.sin(angle),
         );
-        canvas.drawCircle(offset, seatRadius, paint);
+        if (haloPaint != null) {
+          canvas.drawCircle(offset, haloRadius, haloPaint);
+        }
+        canvas.drawCircle(offset, drawRadius, paint);
+        if (strokePaint != null) {
+          canvas.drawCircle(offset, drawRadius, strokePaint);
+        }
       }
     }
   }
@@ -440,6 +568,7 @@ class _ParliamentPainter extends CustomPainter {
   bool shouldRepaint(covariant _ParliamentPainter oldDelegate) {
     return oldDelegate.blocks != blocks ||
         oldDelegate.totalSeats != totalSeats ||
-        oldDelegate.markerThresholds != markerThresholds;
+        oldDelegate.markerThresholds != markerThresholds ||
+        oldDelegate.highlightedParty != highlightedParty;
   }
 }

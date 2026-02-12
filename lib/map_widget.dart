@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:vector_math/vector_math_64.dart' as vmath;
 import 'color_engine.dart';
 import 'region_calculator.dart';
 import 'alliance_calculator.dart';
@@ -40,6 +42,10 @@ class _MapWidgetState extends State<MapWidget> {
   Size? _geometrySize;
   List<dynamic>? _geometryFeatures;
   final List<_RegionGeometry> _regionGeometries = [];
+  final Map<String, String> _regionNames = {};
+  double? _realScale;
+  vmath.Matrix4? _mapTransform;
+  vmath.Matrix4? _inverseMapTransform;
 
   static const hoverThrottle = Duration(milliseconds: 40);
 
@@ -88,23 +94,38 @@ class _MapWidgetState extends State<MapWidget> {
           builder: (_, hovered, __) {
             return GestureDetector(
               onScaleUpdate: widget.onScaleUpdate,
+              behavior: HitTestBehavior.opaque,
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final size = Size(constraints.maxWidth, constraints.maxHeight);
                   _ensureGeometryCache(size);
+                  _updateTransform(size, widget.scale, widget.offset);
+                  final hoveredName =
+                      hovered == null ? null : _regionNames[hovered] ?? hovered;
                   return SizedBox.expand(
-                    child: CustomPaint(
-                      painter: _TurkeyMapPainter(
-                        features: widget.features,
-                        scale: widget.scale,
-                        offset: widget.offset,
-                        regionResults: widget.regionResults,
-                        regionAllianceResults: widget.regionAllianceResults,
-                        useAllianceColors: widget.useAllianceColors,
-                        hoveredProvince: hovered,
-                        onRegionTap: widget.onRegionTap,
-                        regionGeometries: _regionGeometries,
-                      ),
+                    child: Stack(
+                      children: [
+                        CustomPaint(
+                          painter: _TurkeyMapPainter(
+                            features: widget.features,
+                            scale: widget.scale,
+                            offset: widget.offset,
+                            regionResults: widget.regionResults,
+                            regionAllianceResults: widget.regionAllianceResults,
+                            useAllianceColors: widget.useAllianceColors,
+                            hoveredProvince: hovered,
+                            onRegionTap: widget.onRegionTap,
+                            regionGeometries: _regionGeometries,
+                            transform: _mapTransform,
+                          ),
+                        ),
+                        if (hoveredName != null)
+                          Positioned(
+                            left: 8,
+                            top: 8,
+                            child: _HoverLabel(name: hoveredName),
+                          ),
+                      ],
                     ),
                   );
                 },
@@ -120,28 +141,14 @@ class _MapWidgetState extends State<MapWidget> {
     final size = context.size;
     if (size == null) return null;
     _ensureGeometryCache(size);
-    _ensureGeometryCache(size);
+    _updateTransform(size, widget.scale, widget.offset);
 
-    const double minLon = 25.0;
-    const double maxLon = 45.0;
-    const double minLat = 35.8;
-    const double maxLat = 42.2;
-
-    final lonRange = maxLon - minLon;
-    final latRange = maxLat - minLat;
-
-    final scaleX = size.width / lonRange;
-    final scaleY = size.height / latRange;
-    final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
-
-    final mapWidth = lonRange * realScale;
-    final mapHeight = latRange * realScale;
-    final centerOffsetX = (size.width - mapWidth) / 2;
-    final centerOffsetY = (size.height - mapHeight) / 2;
-
-    final translated =
-        position - Offset(centerOffsetX, centerOffsetY) - widget.offset;
-    final localPoint = translated / widget.scale;
+    final inverse = _inverseMapTransform;
+    if (inverse == null) return null;
+    final localVector = inverse.transform3(
+      vmath.Vector3(position.dx, position.dy, 0),
+    );
+    final localPoint = Offset(localVector.x, localVector.y);
 
     for (final geometry in _regionGeometries) {
       for (final path in geometry.paths) {
@@ -165,6 +172,7 @@ class _MapWidgetState extends State<MapWidget> {
     _geometryFeatures = widget.features;
     _geometrySize = size;
     _regionGeometries.clear();
+    _regionNames.clear();
 
     const double minLon = 25.0;
     const double maxLon = 45.0;
@@ -176,12 +184,17 @@ class _MapWidgetState extends State<MapWidget> {
     final scaleX = size.width / lonRange;
     final scaleY = size.height / latRange;
     final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
+    _realScale = realScale;
 
     for (var feature in widget.features) {
       final properties = feature["properties"];
       final regionId = properties?["id"] as String?;
+      final regionName = properties?["SECIM_BOLGESI"] as String?;
       final geom = feature["geometry"];
       if (regionId == null || geom == null) continue;
+      if (regionName != null && regionName.trim().isNotEmpty) {
+        _regionNames[regionId] = _fixTurkishMojibake(regionName.trim());
+      }
 
       final paths = <Path>[];
 
@@ -224,6 +237,36 @@ class _MapWidgetState extends State<MapWidget> {
       }
     }
   }
+
+  void _updateTransform(Size size, double scale, Offset offset) {
+    if (size.isEmpty) return;
+    const double minLon = 25.0;
+    const double maxLon = 45.0;
+    const double minLat = 35.8;
+    const double maxLat = 42.2;
+
+    final lonRange = maxLon - minLon;
+    final latRange = maxLat - minLat;
+    final realScale = _realScale ??
+        ((size.width / lonRange < size.height / latRange
+                ? size.width / lonRange
+                : size.height / latRange) *
+            1.05);
+    final mapWidth = lonRange * realScale;
+    final mapHeight = latRange * realScale;
+    final scaledMapWidth = mapWidth * scale;
+    final scaledMapHeight = mapHeight * scale;
+    final centerOffset = Offset(
+      (size.width - scaledMapWidth) / 2,
+      (size.height - scaledMapHeight) / 2,
+    );
+
+    final transform = vmath.Matrix4.identity()
+      ..translate(offset.dx + centerOffset.dx, offset.dy + centerOffset.dy)
+      ..scale(scale, scale);
+    _mapTransform = transform;
+    _inverseMapTransform = vmath.Matrix4.copy(transform)..invert();
+  }
 }
 
 // -------------------------------------------------------------
@@ -239,6 +282,7 @@ class _TurkeyMapPainter extends CustomPainter {
   final Function(String regionId)? onRegionTap;
   final String? hoveredProvince;
   final List<_RegionGeometry>? regionGeometries;
+  final vmath.Matrix4? transform;
 
   _TurkeyMapPainter({
     required this.features,
@@ -250,6 +294,7 @@ class _TurkeyMapPainter extends CustomPainter {
     this.onRegionTap,
     this.hoveredProvince,
     this.regionGeometries,
+    this.transform,
   });
 
   static const double minLon = 25.0;
@@ -266,13 +311,22 @@ class _TurkeyMapPainter extends CustomPainter {
     final scaleY = size.height / latRange;
     final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
 
-    final mapWidth = lonRange * realScale;
-    final mapHeight = latRange * realScale;
-    final centerOffsetX = (size.width - mapWidth) / 2;
-    final centerOffsetY = (size.height - mapHeight) / 2;
+    final localTransform = transform;
+    if (localTransform != null) {
+      canvas.save();
+      canvas.transform(localTransform.storage);
+    } else {
+      final mapWidth = lonRange * realScale;
+      final mapHeight = latRange * realScale;
+      final scaledMapWidth = mapWidth * scale;
+      final scaledMapHeight = mapHeight * scale;
+      final centerOffsetX = (size.width - scaledMapWidth) / 2;
+      final centerOffsetY = (size.height - scaledMapHeight) / 2;
 
-    canvas.translate(offset.dx + centerOffsetX, offset.dy + centerOffsetY);
-    canvas.scale(scale);
+      canvas.save();
+      canvas.translate(offset.dx + centerOffsetX, offset.dy + centerOffsetY);
+      canvas.scale(scale);
+    }
 
     final geometries = regionGeometries;
     if (geometries != null && geometries.isNotEmpty) {
@@ -313,6 +367,7 @@ class _TurkeyMapPainter extends CustomPainter {
           canvas.drawPath(path, strokePaint);
         }
       }
+      canvas.restore();
       return;
     }
 
@@ -367,6 +422,7 @@ class _TurkeyMapPainter extends CustomPainter {
         }
       }
     }
+    canvas.restore();
   }
 
   void _drawPath(
@@ -447,11 +503,17 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
   late double _scale;
   late Offset _offset;
   String? _hoveredRegion;
-  Offset? _pendingHoverPosition;
-  bool _hoverUpdateScheduled = false;
+  Offset? _latestHoverPosition;
+  DateTime? _lastHoverCompute;
+  Timer? _hoverTimer;
+  static const Duration _hoverThrottle = Duration(milliseconds: 24);
   Size? _geometrySize;
   List<dynamic>? _geometryFeatures;
   final List<_RegionGeometry> _regionGeometries = [];
+  final Map<String, String> _regionNames = {};
+  double? _realScale;
+  vmath.Matrix4? _mapTransform;
+  vmath.Matrix4? _inverseMapTransform;
   ui.Picture? _basePicture;
   Size? _basePictureSize;
   double? _basePictureScale;
@@ -465,6 +527,12 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
     super.initState();
     _scale = widget.scale ?? 1.0;
     _offset = widget.offset ?? Offset.zero;
+  }
+
+  @override
+  void dispose() {
+    _hoverTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -491,24 +559,40 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
             });
             widget.onTransform?.call(_scale, _offset);
           },
+          behavior: HitTestBehavior.opaque,
           child: LayoutBuilder(
             builder: (context, constraints) {
               final size = Size(constraints.maxWidth, constraints.maxHeight);
               _ensureGeometryCache(size);
               _ensureBasePicture(size, _scale);
+              _updateTransform(size, _scale, _offset);
+              final hoveredName = _hoveredRegion == null
+                  ? null
+                  : _regionNames[_hoveredRegion!] ?? _hoveredRegion!;
               return SizedBox.expand(
-                child: CustomPaint(
-                  painter: InteractiveMapPainter(
-                    features: widget.features,
-                    scale: _scale,
-                    offset: _offset,
-                    regionResults: widget.regionResults,
-                    regionAllianceResults: widget.regionAllianceResults,
-                    useAllianceColors: widget.useAllianceColors,
-                    hoveredRegion: _hoveredRegion,
-                    regionGeometries: _regionGeometries,
-                    basePicture: _basePicture,
-                  ),
+                child: Stack(
+                  children: [
+                    CustomPaint(
+                      painter: InteractiveMapPainter(
+                        features: widget.features,
+                        scale: _scale,
+                        offset: _offset,
+                        regionResults: widget.regionResults,
+                        regionAllianceResults: widget.regionAllianceResults,
+                        useAllianceColors: widget.useAllianceColors,
+                        hoveredRegion: _hoveredRegion,
+                        regionGeometries: _regionGeometries,
+                        basePicture: _basePicture,
+                        transform: _mapTransform,
+                      ),
+                    ),
+                    if (hoveredName != null)
+                      Positioned(
+                        left: 8,
+                        top: 8,
+                        child: _HoverLabel(name: hoveredName),
+                      ),
+                  ],
                 ),
               );
             },
@@ -526,46 +610,46 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
   }
 
   void _handlePointerHover(PointerHoverEvent event) {
-    _pendingHoverPosition = event.localPosition;
-    if (_hoverUpdateScheduled) return;
-    _hoverUpdateScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _hoverUpdateScheduled = false;
+    _latestHoverPosition = event.localPosition;
+    final now = DateTime.now();
+    final last = _lastHoverCompute;
+    if (last == null || now.difference(last) >= _hoverThrottle) {
+      _computeHover();
+      return;
+    }
+
+    final remaining = _hoverThrottle - now.difference(last);
+    if (_hoverTimer?.isActive ?? false) return;
+    _hoverTimer = Timer(remaining, () {
       if (!mounted) return;
-      final position = _pendingHoverPosition;
-      if (position == null) return;
-      final regionId = _getRegionAtPosition(position);
-      if (regionId != _hoveredRegion) {
-        setState(() {
-          _hoveredRegion = regionId;
-        });
-      }
+      _computeHover();
     });
+  }
+
+  void _computeHover() {
+    final position = _latestHoverPosition;
+    if (position == null) return;
+    _lastHoverCompute = DateTime.now();
+    final regionId = _getRegionAtPosition(position);
+    if (regionId != _hoveredRegion) {
+      setState(() {
+        _hoveredRegion = regionId;
+      });
+    }
   }
 
   String? _getRegionAtPosition(Offset position) {
     final size = context.size;
     if (size == null) return null;
+    _ensureGeometryCache(size);
+    _updateTransform(size, _scale, _offset);
 
-    const double minLon = 25.0;
-    const double maxLon = 45.0;
-    const double minLat = 35.8;
-    const double maxLat = 42.2;
-
-    final lonRange = maxLon - minLon;
-    final latRange = maxLat - minLat;
-
-    final scaleX = size.width / lonRange;
-    final scaleY = size.height / latRange;
-    final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
-
-    final mapWidth = lonRange * realScale;
-    final mapHeight = latRange * realScale;
-    final centerOffsetX = (size.width - mapWidth) / 2;
-    final centerOffsetY = (size.height - mapHeight) / 2;
-
-    final translated = position - Offset(centerOffsetX, centerOffsetY) - _offset;
-    final localPoint = translated / _scale;
+    final inverse = _inverseMapTransform;
+    if (inverse == null) return null;
+    final localVector = inverse.transform3(
+      vmath.Vector3(position.dx, position.dy, 0),
+    );
+    final localPoint = Offset(localVector.x, localVector.y);
 
     for (final geometry in _regionGeometries) {
       for (final path in geometry.paths) {
@@ -589,6 +673,7 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
     _geometryFeatures = widget.features;
     _geometrySize = size;
     _regionGeometries.clear();
+    _regionNames.clear();
 
     const double minLon = 25.0;
     const double maxLon = 45.0;
@@ -600,12 +685,17 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
     final scaleX = size.width / lonRange;
     final scaleY = size.height / latRange;
     final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
+    _realScale = realScale;
 
     for (var feature in widget.features) {
       final properties = feature["properties"];
       final regionId = properties?["id"] as String?;
+      final regionName = properties?["SECIM_BOLGESI"] as String?;
       final geom = feature["geometry"];
       if (regionId == null || geom == null) continue;
+      if (regionName != null && regionName.trim().isNotEmpty) {
+        _regionNames[regionId] = _fixTurkishMojibake(regionName.trim());
+      }
 
       final paths = <Path>[];
 
@@ -647,6 +737,36 @@ class _InteractiveMapWidgetState extends State<InteractiveMapWidget> {
         );
       }
     }
+  }
+
+  void _updateTransform(Size size, double scale, Offset offset) {
+    if (size.isEmpty) return;
+    const double minLon = 25.0;
+    const double maxLon = 45.0;
+    const double minLat = 35.8;
+    const double maxLat = 42.2;
+
+    final lonRange = maxLon - minLon;
+    final latRange = maxLat - minLat;
+    final realScale = _realScale ??
+        ((size.width / lonRange < size.height / latRange
+                ? size.width / lonRange
+                : size.height / latRange) *
+            1.05);
+    final mapWidth = lonRange * realScale;
+    final mapHeight = latRange * realScale;
+    final scaledMapWidth = mapWidth * scale;
+    final scaledMapHeight = mapHeight * scale;
+    final centerOffset = Offset(
+      (size.width - scaledMapWidth) / 2,
+      (size.height - scaledMapHeight) / 2,
+    );
+
+    final transform = vmath.Matrix4.identity()
+      ..translate(offset.dx + centerOffset.dx, offset.dy + centerOffset.dy)
+      ..scale(scale, scale);
+    _mapTransform = transform;
+    _inverseMapTransform = vmath.Matrix4.copy(transform)..invert();
   }
 
   void _ensureBasePicture(Size size, double scale) {
@@ -719,6 +839,7 @@ class InteractiveMapPainter extends CustomPainter {
   final String? hoveredRegion;
   final List<_RegionGeometry>? regionGeometries;
   final ui.Picture? basePicture;
+  final vmath.Matrix4? transform;
 
   InteractiveMapPainter({
     required this.features,
@@ -730,6 +851,7 @@ class InteractiveMapPainter extends CustomPainter {
     this.hoveredRegion,
     this.regionGeometries,
     this.basePicture,
+    this.transform,
   });
 
   static const double minLon = 25.0;
@@ -746,19 +868,32 @@ class InteractiveMapPainter extends CustomPainter {
     final scaleY = size.height / latRange;
     final realScale = (scaleX < scaleY ? scaleX : scaleY) * 1.05;
 
-    final mapWidth = lonRange * realScale;
-    final mapHeight = latRange * realScale;
-    final centerOffsetX = (size.width - mapWidth) / 2;
-    final centerOffsetY = (size.height - mapHeight) / 2;
+    final localTransform = transform;
+    if (localTransform != null) {
+      canvas.save();
+      canvas.transform(localTransform.storage);
+    } else {
+      final mapWidth = lonRange * realScale;
+      final mapHeight = latRange * realScale;
+      final scaledMapWidth = mapWidth * scale;
+      final scaledMapHeight = mapHeight * scale;
+      final centerOffsetX = (size.width - scaledMapWidth) / 2;
+      final centerOffsetY = (size.height - scaledMapHeight) / 2;
 
-    canvas.translate(offset.dx + centerOffsetX, offset.dy + centerOffsetY);
-    canvas.scale(scale);
+      canvas.save();
+      canvas.translate(offset.dx + centerOffsetX, offset.dy + centerOffsetY);
+      canvas.scale(scale);
+    }
 
     final geometries = regionGeometries;
     if (geometries != null && geometries.isNotEmpty && basePicture != null) {
       canvas.drawPicture(basePicture!);
-      if (hoveredRegion == null) return;
+      if (hoveredRegion == null) {
+        canvas.restore();
+        return;
+      }
       _paintHoveredRegion(canvas, geometries, hoveredRegion!);
+      canvas.restore();
       return;
     }
 
@@ -798,6 +933,7 @@ class InteractiveMapPainter extends CustomPainter {
           canvas.drawPath(path, strokePaint);
         }
       }
+      canvas.restore();
       return;
     }
 
@@ -854,6 +990,7 @@ class InteractiveMapPainter extends CustomPainter {
         }
       }
     }
+    canvas.restore();
   }
 
   void _drawPath(
@@ -963,6 +1100,47 @@ String? _partyWithHighestVote(Map<String, double> votes) {
   return leader;
 }
 
+String _fixTurkishMojibake(String input) {
+  return input
+      .replaceAll('Ã‡', 'Ç')
+      .replaceAll('Ã§', 'ç')
+      .replaceAll('Ã–', 'Ö')
+      .replaceAll('Ã¶', 'ö')
+      .replaceAll('Ãœ', 'Ü')
+      .replaceAll('Ã¼', 'ü')
+      .replaceAll('Ä°', 'İ')
+      .replaceAll('Ä±', 'ı')
+      .replaceAll('Äž', 'Ğ')
+      .replaceAll('ÄŸ', 'ğ')
+      .replaceAll('Åž', 'Ş')
+      .replaceAll('ÅŸ', 'ş');
+}
+
+class _HoverLabel extends StatelessWidget {
+  final String name;
+
+  const _HoverLabel({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.75),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        name,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+}
+
 class _RegionGeometry {
   final String regionId;
   final List<Path> paths;
@@ -972,4 +1150,3 @@ class _RegionGeometry {
     required this.paths,
   });
 }
-

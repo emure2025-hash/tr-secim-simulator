@@ -31,7 +31,7 @@ class _MainPageState extends State<MainPage> {
   List<Alliance> alliances = [];
   MapMode mapMode = MapMode.party;
   List<dynamic> features = [];
-  double mapScale = 1.0;
+  double mapScale = 0.94;
   Offset mapOffset = Offset.zero;
 
   @override
@@ -108,7 +108,27 @@ class _MainPageState extends State<MainPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("TR Seçim Simülatörü"),
+        title: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "PoliVision",
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 2),
+            Text(
+              "Türkiye",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
         centerTitle: true,
         backgroundColor: Colors.blueGrey.shade700,
         foregroundColor: Colors.white,
@@ -140,6 +160,8 @@ class _MainPageState extends State<MainPage> {
                     lastThreshold = threshold;
                     lastPartyOrder = List<String>.from(partyOrder);
                     result = r;
+                    mapScale = 0.94;
+                    mapOffset = Offset.zero;
                     showInput = false;
                   });
                 },
@@ -220,7 +242,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
   late List<String> partyOrder;
   late List<String> _allianceOrderIds;
 
-  static const String _unalignedAllianceLabel = "Ittifaksiz";
+  static const String _unalignedAllianceLabel = "İttifaksız";
 
   double get total => votes.values.fold<double>(0.0, (sum, v) => sum + v);
 
@@ -809,7 +831,7 @@ class _VoteInputScreenState extends State<VoteInputScreen> {
                           ),
                           ButtonSegment(
                             value: MapMode.alliance,
-                            label: Text("Ittifak"),
+                            label: Text("İttifak"),
                             icon: Icon(Icons.groups),
                           ),
                         ],
