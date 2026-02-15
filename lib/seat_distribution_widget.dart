@@ -109,15 +109,23 @@ class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          "Koltuk dağılımı (semi-circle)",
+          "Rakamsal koltuk dağılımı",
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
+              color: const Color(0x1AFFFFFF),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0x3000E5FF), width: 0.8),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x1400E5FF),
+                  blurRadius: 10,
+                  offset: Offset(0, 2),
+                ),
+              ],
             ),
             padding: const EdgeInsets.all(12),
             child: LayoutBuilder(
@@ -160,13 +168,14 @@ class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color:
-                        isHighlighted ? color.withOpacity(0.12) : Colors.white,
+                    color: isHighlighted
+                        ? color.withOpacity(0.16)
+                        : const Color(0x1AFFFFFF),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isHighlighted
                           ? color.withOpacity(0.85)
-                          : color.withOpacity(0.25),
+                          : color.withOpacity(0.30),
                       width: isHighlighted ? 1.5 : 1,
                     ),
                     boxShadow: [
@@ -192,7 +201,7 @@ class _SeatDistributionWidgetState extends State<SeatDistributionWidget> {
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
-                          color: isHighlighted ? color : Colors.black87,
+                          color: isHighlighted ? color : Colors.white70,
                         ),
                       ),
                       const SizedBox(width: 6),
@@ -290,21 +299,17 @@ class _ParliamentPainter extends CustomPainter {
     const markerOuterPad = 10.0;
     const markerLineLength = 18.0;
 
-    final markerPaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2
-      ..color = Colors.black54;
     final labelFillPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = Colors.white.withOpacity(0.85);
+      ..color = const Color(0xCC101827);
     final labelBorderPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = Colors.black26;
+      ..color = const Color(0x6600E5FF);
     const labelTextStyle = TextStyle(
       fontSize: 10,
       fontWeight: FontWeight.w600,
-      color: Colors.black87,
+      color: Colors.white70,
     );
 
     final placedLabelRects = <Rect>[];
@@ -313,6 +318,18 @@ class _ParliamentPainter extends CustomPainter {
     for (int i = 0; i < markerThresholds.length; i++) {
       final threshold = markerThresholds[i];
       if (threshold <= 0 || threshold > totalSeats) continue;
+      final isMajorityLine = threshold == 301;
+      final markerColor = isMajorityLine
+          ? const Color(0xFF00E5FF)
+          : Colors.white60;
+      final glowPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = isMajorityLine ? 4 : 3
+        ..color = markerColor.withOpacity(isMajorityLine ? 0.28 : 0.16);
+      final markerPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = isMajorityLine ? 2.1 : 1.2
+        ..color = markerColor;
       final markerAngle = math.pi - _angleForThreshold(threshold);
       final startRadius = maxRadius + markerOuterPad;
       final endRadius = maxRadius + markerOuterPad + markerLineLength;
@@ -392,6 +409,7 @@ class _ParliamentPainter extends CustomPainter {
         bgRect,
         fallbackEnd: end,
       );
+      canvas.drawLine(start, lineEnd, glowPaint);
       canvas.drawLine(start, lineEnd, markerPaint);
 
       final bgRRect = RRect.fromRectAndRadius(
@@ -432,6 +450,8 @@ class _ParliamentPainter extends CustomPainter {
             startAngle: startAngle,
             sweepAngle: sweepAngle,
             color: block.color.withOpacity(0.2),
+            haloColor: block.color.withOpacity(0.12),
+            haloRadiusScale: 1.25,
             size: size,
             rows: rows,
             maxRadius: maxRadius,
@@ -494,6 +514,8 @@ class _ParliamentPainter extends CustomPainter {
           startAngle: startAngle,
           sweepAngle: sweepAngle,
           color: block.color,
+          haloColor: block.color.withOpacity(0.16),
+          haloRadiusScale: 1.22,
           size: size,
           rows: rows,
           maxRadius: maxRadius,

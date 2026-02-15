@@ -56,6 +56,7 @@ class ResultScreen extends StatefulWidget {
   final List<dynamic> features;
   final double mapScale;
   final Offset mapOffset;
+  final double threshold;
   final Map<String, double> votes;
   final List<String> partyOrder;
   final Map<String, RegionResult>? regionResults;
@@ -73,6 +74,7 @@ class ResultScreen extends StatefulWidget {
     required this.features,
     required this.mapScale,
     required this.mapOffset,
+    required this.threshold,
     required this.votes,
     required this.partyOrder,
     required this.regionResults,
@@ -92,10 +94,10 @@ class ResultScreen extends StatefulWidget {
 class _ResultScreenState extends State<ResultScreen> {
   late double _mapScale;
   late Offset _mapOffset;
-  MapMode _sliderMode = MapMode.party;
   String? _selectedPieLabel;
+  String? _hoveredPanel;
   
-  // Cache için
+  // Cache iÃ§in
   List<_VoteSummary>? _cachedPartySummaries;
   List<_VoteSummary>? _cachedAllianceSummaries;
   Map<String, int>? _cachedSeatMap;
@@ -125,11 +127,6 @@ class _ResultScreenState extends State<ResultScreen> {
       _selectedPieLabel = null;
     }
     
-    if (widget.alliances.isEmpty && _sliderMode == MapMode.alliance) {
-      setState(() {
-        _sliderMode = MapMode.party;
-      });
-    }
   }
 
   void _handleMapUpdate(double scale, Offset offset) {
@@ -337,7 +334,7 @@ class _ResultScreenState extends State<ResultScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isHighlighted ? entry.color : Colors.black87,
+                      color: isHighlighted ? entry.color : Colors.white70,
                     ),
                   ),
                 ),
@@ -483,28 +480,124 @@ class _ResultScreenState extends State<ResultScreen> {
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
-        radius: isHovered ? 60 : 55, // Hover'da büyüt
+        radius: isHovered ? 60 : 55, // Hover'da bÃ¼yÃ¼t
         titlePositionPercentageOffset: isHovered ? 0.65 : 0.6,
       );
     }).toList();
   }
 
+  Widget _buildNeonStatCard({
+    required String title,
+    required String value,
+    String? subtitle,
+    Color accent = const Color(0xFF00E5FF),
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.white60,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 15,
+              color: accent,
+              fontWeight: FontWeight.w700,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Container(
+            height: 2,
+            decoration: BoxDecoration(
+              color: accent.withOpacity(0.75),
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: [
+                BoxShadow(
+                  color: accent.withOpacity(0.45),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.white54,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSmoothPanel({
+    required String id,
+    required Widget child,
+  }) {
+    final hovered = _hoveredPanel == id;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredPanel = id),
+      onExit: (_) => setState(() => _hoveredPanel = null),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 170),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: hovered
+              ? const Color(0x1CFFFFFF)
+              : const Color(0x12000000),
+          border: Border.all(
+            color: hovered
+                ? const Color(0x4000E5FF)
+                : const Color(0x2200E5FF),
+            width: hovered ? 1.0 : 0.6,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: hovered
+                  ? const Color(0x2200E5FF)
+                  : const Color(0x12000000),
+              blurRadius: hovered ? 12 : 6,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: child,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final totalSeats = widget.result.values.fold<int>(0, (a, b) => a + b);
-    final sliderSummaries = _sliderMode == MapMode.alliance
+    final bool canShowAlliance = widget.alliances.isNotEmpty &&
+        (widget.regionAllianceResults?.isNotEmpty ?? false);
+    final activeMode = canShowAlliance ? widget.mapMode : MapMode.party;
+
+    final sliderSummaries = activeMode == MapMode.alliance
         ? _buildAllianceSummaries()
         : _buildPartySummaries();
     final activePieLabel = _selectedPieLabel;
     final seatMap = _buildSeatMapFromSummaries(sliderSummaries);
     final seatColorMap = _buildColorMapFromSummaries(sliderSummaries);
-    
-    // Pie sections'ı sadece hover değiştiğinde yeniden hesapla
     final pieSections =
         _buildPieSections(sliderSummaries, totalSeats, activePieLabel);
-
-    final bool canShowAlliance = widget.alliances.isNotEmpty &&
-        (widget.regionAllianceResults?.isNotEmpty ?? false);
     final pieLegendEntries = sliderSummaries
         .where((summary) => summary.seats > 0)
         .map((summary) {
@@ -519,10 +612,20 @@ class _ResultScreenState extends State<ResultScreen> {
         })
         .toList();
 
+    final topLeader = sliderSummaries.isEmpty ? null : sliderSummaries.first;
+    final majorityThreshold = (totalSeats ~/ 2) + 1;
+    final leaderSeats = topLeader?.seats ?? 0;
+    final hasMajority = leaderSeats >= majorityThreshold;
+    final belowThresholdCount = widget.votes.entries
+        .where((e) => e.value > 0 && e.value < widget.threshold)
+        .length;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Simülasyon Sonuçları"),
-        backgroundColor: Colors.blueGrey.shade700,
+        title: const Text('Simulasyon Sonuclari'),
+        backgroundColor: Colors.black.withOpacity(0.35),
+        elevation: 0,
+        scrolledUnderElevation: 0,
         foregroundColor: Colors.white,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -536,321 +639,333 @@ class _ResultScreenState extends State<ResultScreen> {
                 segments: const [
                   ButtonSegment(
                     value: MapMode.party,
-                    label: Text("Parti"),
+                    label: Text('Parti'),
                     icon: Icon(Icons.flag),
                   ),
                   ButtonSegment(
                     value: MapMode.alliance,
-                    label: Text("İttifak"),
+                    label: Text('Ittifak'),
                     icon: Icon(Icons.groups),
                   ),
                 ],
                 selected: {widget.mapMode},
                 onSelectionChanged: (set) {
-                  if (set.isNotEmpty) widget.onMapModeChanged(set.first);
-                  setState(() {});
+                  if (set.isNotEmpty) {
+                    widget.onMapModeChanged(set.first);
+                    setState(() {});
+                  }
                 },
                 style: ButtonStyle(
                   backgroundColor: MaterialStateProperty.resolveWith((states) {
                     if (states.contains(MaterialState.selected)) {
-                      return Colors.blueGrey.shade700;
+                      return const Color(0x3300E5FF);
                     }
-                    return Colors.blueGrey.shade100;
+                    return const Color(0x1AFFFFFF);
                   }),
-                  foregroundColor: MaterialStateProperty.all(Colors.white),
+                  foregroundColor: MaterialStateProperty.resolveWith((states) {
+                    if (states.contains(MaterialState.selected)) {
+                      return const Color(0xFF00E5FF);
+                    }
+                    return Colors.white70;
+                  }),
                 ),
               ),
             ),
         ],
       ),
-      body: SingleChildScrollView(
+      body: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
         child: Column(
           children: [
-            RepaintBoundary(
-              child: SizedBox(
-                height: 360,
-                child: widget.features.isEmpty
-                    ? const Center(child: CircularProgressIndicator())
-                    : InteractiveMapWidget(
-                        features: widget.features,
-                        regionResults: widget.mapMode == MapMode.party
-                            ? widget.regionResults
-                            : null,
-                        regionAllianceResults: widget.mapMode == MapMode.alliance
-                            ? widget.regionAllianceResults
-                            : null,
-                        useAllianceColors: widget.mapMode == MapMode.alliance,
-                        onRegionTap: widget.onRegionTap,
-                        scale: _mapScale,
-                        offset: _mapOffset,
-                        onTransform: _handleMapUpdate,
-                      ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: SizedBox(
-                height: 320,
-                child: Column(
-                  children: [
-                    if (widget.alliances.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: SegmentedButton<MapMode>(
-                            segments: const [
-                              ButtonSegment(
-                                value: MapMode.party,
-                                label: Text("Parti"),
-                                icon: Icon(Icons.flag),
-                              ),
-                              ButtonSegment(
-                                value: MapMode.alliance,
-                                label: Text("İttifak"),
-                                icon: Icon(Icons.groups),
-                              ),
-                            ],
-                            selected: {_sliderMode},
-                            onSelectionChanged: (set) {
-                              if (set.isEmpty) return;
-                              setState(() {
-                                _sliderMode = set.first;
-                              });
-                            },
-                            style: ButtonStyle(
-                              backgroundColor:
-                                  MaterialStateProperty.resolveWith((states) {
-                                if (states.contains(MaterialState.selected)) {
-                                  return Colors.blueGrey.shade700;
-                                }
-                                return Colors.blueGrey.shade100;
-                              }),
-                              foregroundColor:
-                                  MaterialStateProperty.all(Colors.white),
+            Expanded(
+              flex: 58,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth >= 1120;
+
+                  final pieCard = _buildSmoothPanel(
+                    id: 'pie',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                          const Text(
+                            'Yuzdesel koltuk dagilimi',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                      ),
-                    Expanded(
-                      child: Row(
-                        children: [
+                          const SizedBox(height: 8),
                           Expanded(
-                            child: RepaintBoundary(
-                              child: Card(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                            child: LayoutBuilder(
+                              builder: (context, inner) {
+                                final chart = PieChart(
+                                  PieChartData(
+                                    sections: pieSections,
+                                    sectionsSpace: 2,
+                                    centerSpaceRadius: 36,
+                                    borderData: FlBorderData(show: false),
+                                    pieTouchData: PieTouchData(enabled: false),
+                                  ),
+                                  swapAnimationDuration:
+                                      const Duration(milliseconds: 150),
+                                  swapAnimationCurve: Curves.easeOut,
+                                );
+
+                                if (inner.maxWidth < 260) {
+                                  return Column(
                                     children: [
-                                      const Text(
-                                        "Koltuk dağılımı (pie)",
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
+                                      SizedBox(
+                                        height: 120,
+                                        child: _buildPieLegend(
+                                          pieLegendEntries,
+                                          highlightedLabel: activePieLabel,
                                         ),
                                       ),
                                       const SizedBox(height: 8),
-                                      Expanded(
-                                        child: LayoutBuilder(
-                                          builder: (context, constraints) {
-                                            final chart = PieChart(
-                                              PieChartData(
-                                                sections: pieSections,
-                                                sectionsSpace: 2,
-                                                centerSpaceRadius: 36,
-                                                borderData:
-                                                    FlBorderData(show: false),
-                                                pieTouchData: PieTouchData(
-                                                  enabled: false,
-                                                ),
-                                              ),
-                                              swapAnimationDuration: const Duration(milliseconds: 150),
-                                              swapAnimationCurve: Curves.easeOut,
-                                            );
-
-                                            if (constraints.maxWidth < 260) {
-                                              return Column(
-                                                children: [
-                                                  SizedBox(
-                                                    height: 120,
-                                                    child: _buildPieLegend(
-                                                      pieLegendEntries,
-                                                      highlightedLabel: activePieLabel,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  Expanded(child: chart),
-                                                ],
-                                              );
-                                            }
-
-                                            return Row(
-                                              children: [
-                                                SizedBox(
-                                                  width: 140,
-                                                  child: _buildPieLegend(
-                                                    pieLegendEntries,
-                                                    highlightedLabel: activePieLabel,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Expanded(child: chart),
-                                              ],
-                                            );
-                                          },
-                                        ),
-                                      ),
+                                      Expanded(child: chart),
                                     ],
-                                  ),
-                                ),
-                              ),
+                                  );
+                                }
+
+                                return Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 140,
+                                      child: _buildPieLegend(
+                                        pieLegendEntries,
+                                        highlightedLabel: activePieLabel,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: chart),
+                                  ],
+                                );
+                              },
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Card(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                        ],
+                    ),
+                  );
+
+                  final mapPanel = _buildSmoothPanel(
+                    id: 'map',
+                    child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildNeonStatCard(
+                                  title: 'Toplam MV',
+                                  value: '$totalSeats',
+                                ),
                               ),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: SeatDistributionWidget(
-                                  key: ValueKey('$_sliderMode-${seatMap.length}'),
-                                  seatsByParty: seatMap,
-                                  partyColors: seatColorMap,
-                                  markerThresholds: const [300, 360, 400],
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildNeonStatCard(
+                                  title: activeMode == MapMode.alliance
+                                      ? '1. Ittifak'
+                                      : '1. Parti',
+                                  value: topLeader?.label ?? '-',
+                                  subtitle: '${topLeader?.seats ?? 0} MV',
+                                  accent: const Color(0xFF9D4DFF),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildNeonStatCard(
+                                  title: 'Cogunluk Durumu',
+                                  value: hasMajority
+                                      ? '$leaderSeats MV (Var)'
+                                      : '$leaderSeats MV (Yok)',
+                                  subtitle: 'Esik: $majorityThreshold MV',
+                                  accent: hasMajority
+                                      ? const Color(0xFF00E5FF)
+                                      : const Color(0xFFFF4D8D),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _buildNeonStatCard(
+                                  title: 'Baraj Bilgisi',
+                                  value: '%${widget.threshold.toStringAsFixed(1)}',
+                                  subtitle: 'Baraj alti: $belowThresholdCount',
+                                  accent: const Color(0xFF4DD8FF),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: RepaintBoundary(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: widget.features.isEmpty
+                                      ? const Center(
+                                          child: CircularProgressIndicator(),
+                                        )
+                                      : InteractiveMapWidget(
+                                          features: widget.features,
+                                          regionResults:
+                                              activeMode == MapMode.party
+                                                  ? widget.regionResults
+                                                  : null,
+                                          regionAllianceResults:
+                                              activeMode == MapMode.alliance
+                                                  ? widget.regionAllianceResults
+                                                  : null,
+                                          useAllianceColors:
+                                              activeMode == MapMode.alliance,
+                                          onRegionTap: widget.onRegionTap,
+                                          scale: _mapScale,
+                                          offset: _mapOffset,
+                                          onTransform: _handleMapUpdate,
+                                        ),
                                 ),
                               ),
                             ),
                           ),
                         ],
-                      ),
                     ),
-                  ],
-                ),
+                  );
+
+                  final semiCircleCard = _buildSmoothPanel(
+                    id: 'semi',
+                    child: SeatDistributionWidget(
+                      key: ValueKey('$activeMode-${seatMap.length}'),
+                      seatsByParty: seatMap,
+                      partyColors: seatColorMap,
+                      markerThresholds: const [301, 360, 400],
+                    ),
+                  );
+
+                  if (isWide) {
+                    return Row(
+                      children: [
+                        Expanded(flex: 10, child: pieCard),
+                        const SizedBox(width: 12),
+                        Expanded(flex: 16, child: mapPanel),
+                        const SizedBox(width: 12),
+                        Expanded(flex: 12, child: semiCircleCard),
+                      ],
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      Expanded(flex: 48, child: mapPanel),
+                      const SizedBox(height: 10),
+                      Expanded(
+                        flex: 52,
+                        child: Row(
+                          children: [
+                            Expanded(child: pieCard),
+                            const SizedBox(width: 10),
+                            Expanded(child: semiCircleCard),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    "Toplam Sandalye: $totalSeats",
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  if (widget.alliances.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8, bottom: 12),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: SegmentedButton<MapMode>(
-                          segments: const [
-                            ButtonSegment(
-                              value: MapMode.party,
-                              label: Text("Parti"),
-                              icon: Icon(Icons.flag),
-                            ),
-                            ButtonSegment(
-                              value: MapMode.alliance,
-                              label: Text("İttifak"),
-                              icon: Icon(Icons.groups),
-                            ),
-                          ],
-                          selected: {_sliderMode},
-                          onSelectionChanged: (set) {
-                            if (set.isEmpty) return;
-                            setState(() {
-                              _sliderMode = set.first;
-                            });
-                          },
-                          style: ButtonStyle(
-                            backgroundColor:
-                                MaterialStateProperty.resolveWith((states) {
-                              if (states.contains(MaterialState.selected)) {
-                                return Colors.blueGrey.shade700;
-                              }
-                              return Colors.blueGrey.shade100;
-                            }),
-                            foregroundColor:
-                                MaterialStateProperty.all(Colors.white),
-                          ),
+            const SizedBox(height: 12),
+            Expanded(
+              flex: 42,
+              child: _buildSmoothPanel(
+                id: 'detail',
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        'Detayli Sonuclar (${activeMode == MapMode.alliance ? 'Ittifak' : 'Parti'})',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    ),
-                  const SizedBox(height: 12),
-                  ...sliderSummaries.map((summary) {
-                    return Card(
-                      key: ValueKey('${summary.label}-${summary.seats}'),
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: _sliderMode == MapMode.alliance ? 120 : 40,
-                              child: _sliderMode == MapMode.alliance
-                                  ? _buildAllianceLogos(
-                                      summary.parties,
-                                      summary.color,
-                                    )
-                                  : _buildPartyLogo(
-                                      summary.label,
-                                      summary.color,
-                                    ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ListView.separated(
+                          itemCount: sliderSummaries.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (context, i) {
+                            final summary = sliderSummaries[i];
+                            return Container(
+                              key: ValueKey('${summary.label}-${summary.seats}'),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                color: const Color(0x1400E5FF),
+                                border: Border.all(
+                                  color: const Color(0x3300E5FF),
+                                ),
+                              ),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    summary.label,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
+                                  SizedBox(
+                                    width: activeMode == MapMode.alliance ? 120 : 40,
+                                    child: activeMode == MapMode.alliance
+                                        ? _buildAllianceLogos(
+                                            summary.parties,
+                                            summary.color,
+                                          )
+                                        : _buildPartyLogo(
+                                            summary.label,
+                                            summary.color,
+                                          ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          summary.label,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        LinearProgressIndicator(
+                                          value: summary.votePercent / 100,
+                                          backgroundColor:
+                                              Colors.white.withOpacity(0.08),
+                                          color: summary.color,
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  LinearProgressIndicator(
-                                    value: summary.votePercent / 100,
-                                    backgroundColor: Colors.grey.shade200,
-                                    color: summary.color,
+                                  const SizedBox(width: 10),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text(
+                                        '${summary.votePercent.toStringAsFixed(1)}%',
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text('${summary.seats} MV'),
+                                    ],
                                   ),
                                 ],
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  "${summary.votePercent.toStringAsFixed(1)}%",
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                Text("${summary.seats} MV"),
-                              ],
-                            ),
-                          ],
+                            );
+                          },
                         ),
                       ),
-                    );
-                  }),
-                ],
+                    ],
+                ),
               ),
             ),
           ],

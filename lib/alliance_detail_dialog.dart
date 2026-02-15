@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+
 import 'alliance_calculator.dart';
 import 'color_engine.dart';
 
-/// İttifak bazlı bölge detay dialogu
+/// Ittifak bazli bolge detay dialogu
 class AllianceRegionDetailDialog extends StatelessWidget {
   final RegionAllianceResult result;
 
@@ -11,6 +12,13 @@ class AllianceRegionDetailDialog extends StatelessWidget {
     required this.result,
   });
 
+  static const Color _panelBg = Color(0xFF090F1F);
+  static const Color _surfaceBg = Color(0xFF101A31);
+  static const Color _surfaceSoft = Color(0x141BCDFF);
+  static const Color _borderColor = Color(0x331BCDFF);
+  static const Color _textPrimary = Color(0xFFF4F8FF);
+  static const Color _textSecondary = Color(0xFF9CB3D6);
+
   Widget _buildPartyLogo(String party, {double size = 12}) {
     final logoPath = logoForParty(party);
     if (logoPath == null) {
@@ -18,7 +26,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
         radius: size / 2,
         backgroundColor: colorForParty(party),
         child: Text(
-          party.isNotEmpty ? party[0].toUpperCase() : "?",
+          party.isNotEmpty ? party[0].toUpperCase() : '?',
           style: TextStyle(fontSize: size / 1.5, color: Colors.white),
         ),
       );
@@ -43,7 +51,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
       radius: 12,
       backgroundColor: colorForAlliance(allianceName),
       child: Text(
-        allianceName.isNotEmpty ? allianceName[0].toUpperCase() : "?",
+        allianceName.isNotEmpty ? allianceName[0].toUpperCase() : '?',
         style: const TextStyle(fontSize: 12, color: Colors.white),
       ),
     );
@@ -64,23 +72,39 @@ class AllianceRegionDetailDialog extends StatelessWidget {
       ..sort((a, b) => b.value.compareTo(a.value));
     final sortedAllianceVotes = result.allianceVotes.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+
     Color allianceColor(String allianceName) {
       final leading = result.leadingPartyPerAlliance[allianceName];
-      return leading != null
-          ? colorForParty(leading)
-          : colorForAlliance(allianceName);
+      return leading != null ? colorForParty(leading) : colorForAlliance(allianceName);
     }
 
     return Dialog(
+      backgroundColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 500),
+        constraints: const BoxConstraints(maxWidth: 560),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0A1022), _panelBg],
+          ),
+          border: Border.all(color: _borderColor),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x401BCDFF),
+              blurRadius: 22,
+              spreadRadius: -12,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Başlık
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -101,15 +125,15 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: _textPrimary,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "${region.seats} Milletvekili",
+                          '${region.seats} Milletvekili',
                           style: const TextStyle(
                             fontSize: 14,
-                            color: Colors.white70,
+                            color: Color(0xFFE3EEFF),
                           ),
                         ),
                       ],
@@ -122,24 +146,20 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                 ],
               ),
             ),
-
-            // İçerik
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Kazanan İttifak
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: allianceColor(result.winnerAlliance)
-                            .withOpacity(0.1),
+                        color: allianceColor(result.winnerAlliance).withOpacity(0.12),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: allianceColor(result.winnerAlliance),
-                          width: 2,
+                          width: 1.6,
                         ),
                       ),
                       child: Row(
@@ -155,10 +175,10 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  "Kazanan İttifak",
+                                  'Kazanan Ittifak',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey,
+                                    color: _textSecondary,
                                   ),
                                 ),
                                 Text(
@@ -166,6 +186,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
+                                    color: _textPrimary,
                                   ),
                                 ),
                               ],
@@ -174,71 +195,66 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // İttifak Dağılımı
                     const Text(
-                      "İttifak Milletvekili Dağılımı",
+                      'Ittifak Milletvekili Dagilimi',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        color: _textPrimary,
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     ...sortedAlliances.map((entry) {
                       if (entry.value == 0) return const SizedBox.shrink();
 
                       final allianceName = entry.key;
                       final seats = entry.value;
-                      final partySeats =
-                          result.partySeatsInAlliance[allianceName] ?? {};
+                      final partySeats = result.partySeatsInAlliance[allianceName] ?? <String, int>{};
 
-                      return Card(
+                      return Container(
                         margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: _surfaceBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _borderColor),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // İttifak Başlığı
                               Row(
                                 children: [
                                   _buildAllianceLeaderLogo(allianceName),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           allianceName,
                                           style: const TextStyle(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w600,
+                                            color: _textPrimary,
                                           ),
                                         ),
                                         if (partySeats.isNotEmpty) ...[
                                           const SizedBox(height: 6),
-                                          _buildAllianceLogos(
-                                            partySeats.keys,
-                                          ),
+                                          _buildAllianceLogos(partySeats.keys),
                                         ],
                                       ],
                                     ),
                                   ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
-                                    ),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                     decoration: BoxDecoration(
                                       color: allianceColor(allianceName),
-                                      borderRadius: BorderRadius.circular(8),
+                                      borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Text(
-                                      "$seats MV",
+                                      '$seats MV',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
@@ -248,21 +264,19 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                   ),
                                 ],
                               ),
-
-                              // İttifak içindeki partiler
                               if (partySeats.isNotEmpty) ...[
                                 const SizedBox(height: 8),
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
+                                    color: _surfaceSoft,
                                     borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: const Color(0x2AFFFFFF)),
                                   ),
                                   child: Column(
                                     children: partySeats.entries.map((party) {
                                       return Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            vertical: 4),
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
                                         child: Row(
                                           children: [
                                             _buildPartyLogo(party.key),
@@ -271,15 +285,17 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                               child: Text(
                                                 party.key,
                                                 style: const TextStyle(
-                                                    fontSize: 13),
+                                                  fontSize: 13,
+                                                  color: _textPrimary,
+                                                ),
                                               ),
                                             ),
                                             Text(
-                                              "${party.value} MV",
-                                              style: TextStyle(
+                                              '${party.value} MV',
+                                              style: const TextStyle(
                                                 fontSize: 13,
                                                 fontWeight: FontWeight.bold,
-                                                color: Colors.grey.shade700,
+                                                color: _textSecondary,
                                               ),
                                             ),
                                           ],
@@ -293,27 +309,28 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                           ),
                         ),
                       );
-                    }).toList(),
-
+                    }),
                     const SizedBox(height: 24),
-
-                    // Oy Oranları
                     const Text(
-                      "İttifak Oy Oranları",
+                      'Ittifak Oy Oranlari',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        color: _textPrimary,
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     ...sortedAllianceVotes.map((entry) {
                       final allianceName = entry.key;
-                      final allianceParties =
-                          result.partySeatsInAlliance[allianceName]?.keys ?? [];
+                      final allianceParties = result.partySeatsInAlliance[allianceName]?.keys ?? const <String>[];
 
-                      return Card(
+                      return Container(
                         margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: _surfaceBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _borderColor),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
                           child: Row(
@@ -329,34 +346,38 @@ class AllianceRegionDetailDialog extends StatelessWidget {
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
+                                        color: _textPrimary,
                                       ),
                                     ),
                                     if (allianceParties.isNotEmpty) ...[
                                       const SizedBox(height: 6),
                                       _buildAllianceLogos(allianceParties),
                                     ],
-                                    const SizedBox(height: 4),
+                                    const SizedBox(height: 6),
                                     LinearProgressIndicator(
                                       value: entry.value / 100,
-                                      backgroundColor: Colors.grey.shade200,
+                                      backgroundColor: const Color(0x1FFFFFFF),
                                       color: allianceColor(allianceName),
+                                      minHeight: 6,
+                                      borderRadius: BorderRadius.circular(999),
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                "%${entry.value.toStringAsFixed(1)}",
+                                '%${entry.value.toStringAsFixed(1)}',
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
+                                  color: _textPrimary,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       );
-                    }).toList(),
+                    }),
                   ],
                 ),
               ),
@@ -368,7 +389,7 @@ class AllianceRegionDetailDialog extends StatelessWidget {
   }
 }
 
-/// Dialog'u göstermek için yardımcı fonksiyon
+/// Dialog'u gostermek icin yardimci fonksiyon
 void showAllianceRegionDetail(BuildContext context, RegionAllianceResult result) {
   showDialog(
     context: context,

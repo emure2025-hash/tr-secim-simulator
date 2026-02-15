@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
-import 'region_calculator.dart';
-import 'color_engine.dart';
+﻿import 'package:flutter/material.dart';
 
-/// Seçim bölgesi detaylarını gösteren dialog
+import 'color_engine.dart';
+import 'region_calculator.dart';
+
+/// Secim bolgesi detaylarini gosteren dialog
 class RegionDetailDialog extends StatelessWidget {
   final RegionResult result;
 
@@ -11,6 +12,12 @@ class RegionDetailDialog extends StatelessWidget {
     required this.result,
   });
 
+  static const Color _panelBg = Color(0xFF090F1F);
+  static const Color _surfaceBg = Color(0xFF101A31);
+  static const Color _borderColor = Color(0x331BCDFF);
+  static const Color _textPrimary = Color(0xFFF4F8FF);
+  static const Color _textSecondary = Color(0xFF9CB3D6);
+
   Widget _buildPartyLogo(String party) {
     final logoPath = logoForParty(party);
     if (logoPath == null) {
@@ -18,7 +25,7 @@ class RegionDetailDialog extends StatelessWidget {
         radius: 14,
         backgroundColor: colorForParty(party),
         child: Text(
-          party.isNotEmpty ? party[0].toUpperCase() : "?",
+          party.isNotEmpty ? party[0].toUpperCase() : '?',
           style: const TextStyle(fontSize: 12, color: Colors.white),
         ),
       );
@@ -50,20 +57,37 @@ class RegionDetailDialog extends StatelessWidget {
         }
         return b.value.compareTo(a.value);
       });
-    
+
     final sortedVotes = result.votes.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     return Dialog(
+      backgroundColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
       ),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 500),
+        constraints: const BoxConstraints(maxWidth: 560),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF0A1022), _panelBg],
+          ),
+          border: Border.all(color: _borderColor),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x401BCDFF),
+              blurRadius: 22,
+              spreadRadius: -12,
+              offset: Offset(0, 10),
+            ),
+          ],
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Başlık
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -84,15 +108,15 @@ class RegionDetailDialog extends StatelessWidget {
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: _textPrimary,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          "${region.seats} Milletvekili",
+                          '${region.seats} Milletvekili',
                           style: const TextStyle(
                             fontSize: 14,
-                            color: Colors.white70,
+                            color: Color(0xFFE3EEFF),
                           ),
                         ),
                       ],
@@ -105,23 +129,20 @@ class RegionDetailDialog extends StatelessWidget {
                 ],
               ),
             ),
-
-            // İçerik
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Kazanan Parti
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: colorForParty(result.winner).withOpacity(0.1),
+                        color: colorForParty(result.winner).withOpacity(0.12),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: colorForParty(result.winner),
-                          width: 2,
+                          width: 1.6,
                         ),
                       ),
                       child: Row(
@@ -139,10 +160,10 @@ class RegionDetailDialog extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  "Kazanan Parti",
+                                  'Kazanan Parti',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Colors.grey,
+                                    color: _textSecondary,
                                   ),
                                 ),
                                 Text(
@@ -150,6 +171,7 @@ class RegionDetailDialog extends StatelessWidget {
                                   style: const TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
+                                    color: _textPrimary,
                                   ),
                                 ),
                               ],
@@ -158,28 +180,30 @@ class RegionDetailDialog extends StatelessWidget {
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Milletvekili Dağılımı
                     const Text(
-                      "Milletvekili Dağılımı",
+                      'Milletvekili Dagilimi',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        color: _textPrimary,
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     ...sortedSeats.map((entry) {
                       if (entry.value == 0) return const SizedBox.shrink();
-                      
-                      return Card(
+
+                      return Container(
                         margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: _surfaceBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _borderColor),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
+                          child: Row(
+                            children: [
                               _buildPartyLogo(entry.key),
                               const SizedBox(width: 12),
                               Expanded(
@@ -188,20 +212,18 @@ class RegionDetailDialog extends StatelessWidget {
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
+                                    color: _textPrimary,
                                   ),
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(
                                   color: colorForParty(entry.key),
-                                  borderRadius: BorderRadius.circular(8),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(
-                                  "${entry.value} MV",
+                                  '${entry.value} MV',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -213,27 +235,29 @@ class RegionDetailDialog extends StatelessWidget {
                           ),
                         ),
                       );
-                    }).toList(),
-
+                    }),
                     const SizedBox(height: 24),
-
-                    // Oy Oranları
                     const Text(
-                      "Oy Oranları",
+                      'Oy Oranlari',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
+                        color: _textPrimary,
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     ...sortedVotes.map((entry) {
-                      return Card(
+                      return Container(
                         margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: _surfaceBg,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: _borderColor),
+                        ),
                         child: Padding(
                           padding: const EdgeInsets.all(12),
-                        child: Row(
-                          children: [
+                          child: Row(
+                            children: [
                               _buildPartyLogo(entry.key),
                               const SizedBox(width: 12),
                               Expanded(
@@ -245,30 +269,34 @@ class RegionDetailDialog extends StatelessWidget {
                                       style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w600,
+                                        color: _textPrimary,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
                                     LinearProgressIndicator(
                                       value: entry.value / 100,
-                                      backgroundColor: Colors.grey.shade200,
+                                      backgroundColor: const Color(0x1FFFFFFF),
                                       color: colorForParty(entry.key),
+                                      minHeight: 6,
+                                      borderRadius: BorderRadius.circular(999),
                                     ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 12),
                               Text(
-                                "%${entry.value.toStringAsFixed(1)}",
+                                '%${entry.value.toStringAsFixed(1)}',
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
+                                  color: _textPrimary,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       );
-                    }).toList(),
+                    }),
                   ],
                 ),
               ),
@@ -280,7 +308,7 @@ class RegionDetailDialog extends StatelessWidget {
   }
 }
 
-/// Dialog'u göstermek için yardımcı fonksiyon
+/// Dialog'u gostermek icin yardimci fonksiyon
 void showRegionDetail(BuildContext context, RegionResult result) {
   showDialog(
     context: context,
