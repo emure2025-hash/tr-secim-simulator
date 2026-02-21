@@ -559,26 +559,55 @@ class _ResultScreenState extends State<ResultScreen> {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          color: hovered
-              ? const Color(0x1CFFFFFF)
-              : const Color(0x12000000),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: hovered
+                ? const [Color(0xA81E2A4A), Color(0xA4281B49)]
+                : const [Color(0x7A18223D), Color(0x7420163A)],
+          ),
           border: Border.all(
             color: hovered
-                ? const Color(0x4000E5FF)
-                : const Color(0x2200E5FF),
+                ? const Color(0x7A00E5FF)
+                : const Color(0x4D00E5FF),
             width: hovered ? 1.0 : 0.6,
           ),
           boxShadow: [
             BoxShadow(
               color: hovered
-                  ? const Color(0x2200E5FF)
-                  : const Color(0x12000000),
-              blurRadius: hovered ? 12 : 6,
-              offset: const Offset(0, 3),
+                  ? const Color(0x3D00E5FF)
+                  : const Color(0x2210122C),
+              blurRadius: hovered ? 16 : 10,
+              offset: const Offset(0, 4),
+            ),
+            const BoxShadow(
+              color: Color(0x229D4DFF),
+              blurRadius: 18,
+              spreadRadius: -2,
             ),
           ],
         ),
         child: child,
+      ),
+    );
+  }
+
+  Widget _buildCyberBackdrop() {
+    return IgnorePointer(
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF0B1122), Color(0xFF120A26), Color(0xFF0A1224)],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -621,6 +650,7 @@ class _ResultScreenState extends State<ResultScreen> {
         .length;
 
     return Scaffold(
+      backgroundColor: const Color(0xFF080F1F),
       appBar: AppBar(
         title: const Text('Simulasyon Sonuclari'),
         backgroundColor: Colors.black.withOpacity(0.35),
@@ -673,10 +703,13 @@ class _ResultScreenState extends State<ResultScreen> {
             ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-        child: Column(
-          children: [
+      body: Stack(
+        children: [
+          _buildCyberBackdrop(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            child: Column(
+              children: [
             Expanded(
               flex: 58,
               child: LayoutBuilder(
@@ -965,12 +998,14 @@ class _ResultScreenState extends State<ResultScreen> {
                         ),
                       ),
                     ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+      ],
+    ),
     );
   }
 }
