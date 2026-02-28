@@ -1,29 +1,32 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>PoliVision</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@600&family=Inter:wght@300;400;600;700;800&family=Sora:wght@700;800&family=Space+Grotesk:wght@700;800&display=swap" rel="stylesheet">
 
 <style>
 :root{
-  --bg:#0e1117;
+  --bg:#0b1428;
   --fg:#e6edf3;
   --muted:rgba(230,237,243,0.72);
   --muted2:rgba(230,237,243,0.55);
-  --border:#30363d;
-  --card:#0f141b;
-  --card2:#0b1016;
+  --border:#2a3346;
+  --card:#101a2d;
+  --card2:#0d1524;
   --accent:#238636;
   --accent2:#2ea043;
 }
 
 *{ margin:0; padding:0; box-sizing:border-box; font-family:'Inter', sans-serif; }
 body{
-  background: radial-gradient(800px 500px at 50% 20%, rgba(255,255,255,0.06), transparent 60%),
-              linear-gradient(180deg, #0b0f14 0%, var(--bg) 35%, #0a0d12 100%);
+  background:
+    radial-gradient(980px 600px at 50% 20%, rgba(44,80,138,0.14), transparent 68%),
+    radial-gradient(1300px 760px at 50% 100%, rgba(22,42,82,0.22), transparent 74%),
+    linear-gradient(180deg, #07101d 0%, var(--bg) 46%, #091324 100%);
   color:var(--fg);
 }
 
@@ -31,34 +34,70 @@ a{ color:inherit; text-decoration:none; }
 .page{
   max-width:1100px;
   margin:0 auto;
-  padding:28px 24px 80px;
+  padding:0 24px 80px;
 }
 
 /* Top bar */
 .topbar{
+  position:sticky;
+  top:0;
+  z-index:50;
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:16px;
-  margin-bottom:40px;
+  margin:0 0 40px;
+  padding:20px 0 12px;
 }
-.logo{
-  font-size:14px;
-  letter-spacing:2px;
-  opacity:0.6;
+.topbar::before{
+  content:"";
+  position:absolute;
+  top:0;
+  left:50%;
+  transform:translateX(-50%);
+  width:100vw;
+  height:100%;
+  background:linear-gradient(180deg, rgba(2,6,12,0.965) 0%, rgba(4,9,17,0.92) 100%);
+  border-bottom:1px solid rgba(255,255,255,0.09);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  z-index:-1;
+}
+.brandmark{
+  display:flex;
+  align-items:baseline;
+  gap:10px;
+  letter-spacing:0.2px;
+}
+.brandmark .pv{
+  font-family:"Space Grotesk","Sora","Inter",sans-serif;
+  font-size:20px;
+  font-weight:700;
+  opacity:0.97;
+  letter-spacing:0.2px;
+  text-shadow:0 0 18px rgba(230,237,243,0.14);
+}
+.brandmark .edition{
+  font-family:"Inter","IBM Plex Sans",sans-serif;
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:2.6px;
+  text-transform:uppercase;
+  opacity:0.8;
 }
 .nav{
   display:flex;
   gap:18px;
-  opacity:0.75;
+  opacity:0.92;
   font-size:14px;
 }
 .nav a{
   padding:8px 10px;
   border-radius:8px;
+  color:rgba(230,237,243,0.88);
 }
 .nav a:hover{
-  background:rgba(255,255,255,0.04);
+  background:rgba(255,255,255,0.07);
 }
 
 /* Hero */
@@ -69,7 +108,9 @@ a{ color:inherit; text-decoration:none; }
 h1{
   font-size:52px;
   line-height:1.12;
-  font-weight:600;
+  font-weight:700;
+  color:rgba(230,237,243,0.93);
+  text-shadow:0 0 10px rgba(230,237,243,0.04);
   margin-bottom:18px;
 }
 .sub{
@@ -77,7 +118,7 @@ h1{
   margin:0 auto;
   font-size:18px;
   line-height:1.7;
-  color:var(--muted);
+  color:rgba(230,237,243,0.68);
   margin-bottom:28px;
 }
 .cta{
@@ -105,8 +146,8 @@ h1{
 .btn.secondary:hover{ background:rgba(255,255,255,0.04); }
 .note{
   font-size:13px;
-  color:var(--muted2);
-  opacity:0.95;
+  color:rgba(230,237,243,0.42);
+  opacity:0.9;
 }
 
 /* Sections */
@@ -212,15 +253,15 @@ h1{
 .langbtn{
   border:none;
   background:transparent;
-  color:rgba(230,237,243,0.70);
+  color:rgba(230,237,243,0.84);
   padding:7px 10px;
   border-radius:999px;
   font-size:12px;
   cursor:pointer;
 }
 .langbtn.active{
-  background:rgba(255,255,255,0.08);
-  color:rgba(230,237,243,0.95);
+  background:rgba(255,255,255,0.12);
+  color:rgba(230,237,243,0.99);
 }
 
 /* Responsive */
@@ -229,6 +270,8 @@ h1{
   .grid{ grid-template-columns:1fr; }
   .pricing{ grid-template-columns:1fr; }
   .nav{ display:none; }
+  .brandmark .pv{ font-size:18px; }
+  .brandmark .edition{ font-size:10px; letter-spacing:2.2px; }
 }
 </style>
 </head>
@@ -237,7 +280,10 @@ h1{
   <div class="page">
 
     <div class="topbar">
-      <div class="logo" data-i18n="brand">PoliVision Türkiye</div>
+      <div class="brandmark" aria-label="PoliVision Türkiye">
+        <span class="pv">PoliVision</span>
+        <span class="edition" data-i18n="brand_edition">TURKIYE</span>
+      </div>
 
       <div style="display:flex; align-items:center; gap:10px;">
         <div class="nav">
@@ -254,9 +300,9 @@ h1{
     </div>
 
     <div class="hero">
-      <h1 data-i18n="hero_title">Turn political scenarios into visual context.</h1>
+      <h1 data-i18n="hero_title">Turn political scenarios into visual context</h1>
       <div class="sub" data-i18n="hero_sub">
-        Tools and visualisers for exploring political possibilities — designed for creators, journalists, and analysts.
+        Tools and visualisers for exploring political possibilities — designed for creators, journalists, and analysts
       </div>
 
       <div class="cta">
@@ -271,7 +317,7 @@ h1{
 
     <!-- What is -->
     <div class="section" id="tool">
-      <h2 data-i18n="h2_what">What is PoliVision?</h2>
+      <h2 data-i18n="h2_what">What is PoliVision ?</h2>
       <p class="lead" data-i18n="lead_what">
         PoliVision is a political scenario visualisation tool designed to explore how hypothetical vote distributions
         translate into parliamentary outcomes. It does not predict results or produce commentary.
@@ -301,7 +347,7 @@ h1{
 
     <!-- Use cases -->
     <div class="section">
-      <h2 data-i18n="h2_do">What can you do with it?</h2>
+      <h2 data-i18n="h2_do">What can you do with it ?</h2>
       <p class="lead" data-i18n="lead_do">
         Use PoliVision to add structure and visual clarity to your political analysis — without overclaiming certainty.
       </p>
@@ -425,7 +471,7 @@ h1{
 
     <div class="footer">
       <div><span data-i18n="footer_copy_prefix">©</span> <span id="y"></span> <span data-i18n="footer_rights">PoliVision. All rights reserved.</span></div>
-      <div data-i18n="footer_contact">Contact: hello@polivision.app (soon)</div>
+      <div data-i18n="footer_contact">Contact: hello@polivision.app</div>
     </div>
 
   </div>
@@ -435,18 +481,18 @@ document.getElementById('y').textContent = new Date().getFullYear();
 
 const dict = {
   en: {
-    brand: "PoliVision Türkiye",
+    brand_edition: "TURKIYE",
     nav_tool: "Tool",
     nav_data: "Data",
     nav_licensing: "Licensing",
 
-    hero_title: "Turn political scenarios into visual context.",
-    hero_sub: "Tools and visualisers for exploring political possibilities — designed for creators, journalists, and analysts.",
+    hero_title: "Turn political scenarios into visual context",
+    hero_sub: "Tools and visualisers for exploring political possibilities — designed for creators, journalists, and analysts",
     hero_note: "PoliVision does not predict outcomes or produce commentary. It visualises hypothetical scenarios.",
     btn_explore: "Explore the Tool",
     btn_learn: "Learn More",
 
-    h2_what: "What is PoliVision?",
+    h2_what: "What is PoliVision ?",
     lead_what: "PoliVision is a political scenario visualisation tool designed to explore how hypothetical vote distributions translate into parliamentary outcomes. It does not predict results or produce commentary. It simply turns assumptions into visual context.",
 
     kicker_scenario_engine: "Scenario engine",
@@ -461,7 +507,7 @@ const dict = {
     card_what_3_title: "Designed to avoid “prediction” framing",
     card_what_3_desc: "Outputs are presented as hypothetical scenarios — intended to support analysis, not replace it.",
 
-    h2_do: "What can you do with it?",
+    h2_do: "What can you do with it ?",
     lead_do: "Use PoliVision to add structure and visual clarity to your political analysis — without overclaiming certainty.",
 
     kicker_coalitions: "Coalitions",
@@ -527,22 +573,22 @@ const dict = {
 
     footer_copy_prefix: "©",
     footer_rights: "PoliVision. All rights reserved.",
-    footer_contact: "Contact: hello@polivision.app (soon)"
+    footer_contact: "Contact: hello@polivision.app"
   },
 
   tr: {
-    brand: "PoliVision Türkiye",
+    brand_edition: "TURKIYE",
     nav_tool: "Araç",
     nav_data: "Veri",
     nav_licensing: "Lisans",
 
-    hero_title: "Politik senaryoları görsel bağlama dönüştür.",
-    hero_sub: "Olasılıkları keşfetmek için politik araçlar ve görselleştiriciler — içerik üreticileri, gazeteciler ve analistler için.",
+    hero_title: "Politik senaryoları görsel bağlama dönüştür",
+    hero_sub: "Olasılıkları keşfetmek için politik araçlar ve görselleştiriciler — içerik üreticileri, gazeteciler ve analistler için",
     hero_note: "PoliVision sonuç tahmini yapmaz ve yorum üretmez. Varsayımsal senaryoları görselleştirir.",
     btn_explore: "Aracı İncele",
     btn_learn: "Detaylar",
 
-    h2_what: "PoliVision nedir?",
+    h2_what: "PoliVision nedir ?",
     lead_what: "PoliVision, varsayımsal oy dağılımlarının parlamentoya nasıl yansıyabileceğini keşfetmek için tasarlanmış bir politik senaryo görselleştirme aracıdır. Sonuç tahmini yapmaz ve yorum üretmez. Yalnızca varsayımları görsel bağlama dönüştürür.",
 
     kicker_scenario_engine: "Senaryo motoru",
@@ -557,7 +603,7 @@ const dict = {
     card_what_3_title: "“Tahmin” çerçevesinden kaçınacak şekilde tasarlandı",
     card_what_3_desc: "Çıktılar varsayımsal senaryolar olarak sunulur — analizi desteklemek içindir, yerine geçmek için değil.",
 
-    h2_do: "Ne işe yarar?",
+    h2_do: "Ne işe yarar ?",
     lead_do: "PoliVision’ı politik analizine yapı ve görsel netlik katmak için kullan — kesinlik iddiasına girmeden.",
 
     kicker_coalitions: "İttifaklar",
@@ -623,7 +669,7 @@ const dict = {
 
     footer_copy_prefix: "©",
     footer_rights: "PoliVision. Tüm hakları saklıdır.",
-    footer_contact: "İletişim: hello@polivision.app (yakında)"
+    footer_contact: "İletişim: hello@polivision.app"
   }
 };
 
@@ -647,3 +693,6 @@ setLang(localStorage.getItem("polivision_lang") || "en");
 </script>
 </body>
 </html>
+
+
+
